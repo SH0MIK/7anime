@@ -1,0 +1,28 @@
+<svg width="480" height="120" viewBox="0 0 480 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sl-blue" x1="0" y1="0" x2="480" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8" />
+      <stop offset="0.5" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#0284c7" />
+    </linearGradient>
+    <filter id="sl-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Korean Original Script Subtitle -->
+  <text x="4" y="24" font-family="'Geist', system-ui, sans-serif" font-size="14" font-weight="900" fill="#38bdf8" letter-spacing="4">
+    나 혼자만 레벨업
+  </text>
+  <!-- Main Title: SOLO LEVELING -->
+  <text x="4" y="82" font-family="'Geist', system-ui, sans-serif" font-size="58" font-weight="900" font-style="italic" fill="url(#sl-blue)" letter-spacing="2" filter="url(#sl-glow)">
+    SOLO LEVELING
+  </text>
+  <!-- Cyber Cut Speed Slash -->
+  <path d="M4 90L460 90" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.8" />
+  <!-- Season 2 Subtitle -->
+  <text x="6" y="112" font-family="'Geist Mono', monospace" font-size="13" font-weight="700" fill="#ffffff" letter-spacing="3" opacity="0.9">
+    SEASON 2 : ARISE FROM THE SHADOW
+  </text>
+</svg>
+

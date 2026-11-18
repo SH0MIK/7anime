@@ -1,0 +1,19 @@
+<svg width="460" height="120" viewBox="0 0 460 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="fri-grad" x1="0" y1="0" x2="460" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" />
+      <stop offset="0.7" stop-color="#a7f3d0" />
+      <stop offset="1" stop-color="#34d399" />
+    </linearGradient>
+  </defs>
+  <text x="4" y="24" font-family="'Geist', system-ui, sans-serif" font-size="14" font-weight="800" fill="#34d399" letter-spacing="6">
+    葬送のフリーレン
+  </text>
+  <text x="4" y="80" font-family="'Geist', serif, system-ui" font-size="52" font-weight="800" fill="url(#fri-grad)" letter-spacing="2">
+    FRIEREN
+  </text>
+  <text x="6" y="108" font-family="'Geist Mono', monospace" font-size="12" font-weight="700" fill="#d1fae5" letter-spacing="3">
+    BEYOND JOURNEY’S END
+  </text>
+</svg>
+

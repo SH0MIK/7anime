@@ -1,0 +1,203 @@
+{
+  "heroOuterSnippet": "",
+  "logoStyles": {
+    "src": "https://ani.pm/logos/113415.avif",
+    "alt": "JUJUTSU KAISEN",
+    "className": "spot-logo",
+    "style": "margin: 0px;",
+    "width": 394,
+    "height": 88,
+    "parentClassName": "spot-title",
+    "computed": {
+      "maxHeight": "none",
+      "maxWidth": "518.16px",
+      "objectFit": "contain"
+    }
+  },
+  "heroButtons": [
+    {
+      "text": "Play",
+      "className": "btn btn-play",
+      "computed": {
+        "borderRadius": "40px",
+        "padding": "0px 42px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "color": "rgb(10, 10, 10)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "library-status-trigger  hero-library-status-trigger",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(20, 22, 28, 0.92)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "btn btn-ghost spot-frost-control",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "Play",
+      "className": "btn btn-play",
+      "computed": {
+        "borderRadius": "40px",
+        "padding": "0px 42px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "color": "rgb(10, 10, 10)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "library-status-trigger  hero-library-status-trigger",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(20, 22, 28, 0.92)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "btn btn-ghost spot-frost-control",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "Play",
+      "className": "btn btn-play",
+      "computed": {
+        "borderRadius": "40px",
+        "padding": "0px 42px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "color": "rgb(10, 10, 10)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "library-status-trigger  hero-library-status-trigger",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(20, 22, 28, 0.92)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "btn btn-ghost spot-frost-control",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "btn btn-ghost spot-frost-control spot-nav-btn",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "",
+      "className": "btn btn-ghost spot-frost-control spot-nav-btn",
+      "computed": {
+        "borderRadius": "50%",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "salama the unicorn cupcake lady ᶻ 𝗓 𐰁:\nYES OMG i highkey need to continue tgswiiwagaa after im done w finals",
+      "className": "home-activity-pill__chat",
+      "computed": {
+        "borderRadius": "0px",
+        "padding": "0px 0px 2px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgba(255, 255, 255, 0.72)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "ani.pm",
+      "className": "home-activity-pill__mirror",
+      "computed": {
+        "borderRadius": "4px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    },
+    {
+      "text": "ani.nz",
+      "className": "home-activity-pill__mirror",
+      "computed": {
+        "borderRadius": "4px",
+        "padding": "0px",
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "color": "rgb(255, 255, 255)",
+        "backdropFilter": "none"
+      }
+    }
+  ],
+  "sections": [
+    {
+      "tagName": "DIV",
+      "className": "",
+      "id": "",
+      "title": "",
+      "childrenCount": 1
+    },
+    {
+      "tagName": "SECTION",
+      "className": "spot",
+      "id": "",
+      "title": "",
+      "childrenCount": 3
+    },
+    {
+      "tagName": "SECTION",
+      "className": "row centered-carousel",
+      "id": "",
+      "title": "Top \nWeekly\n Animes",
+      "childrenCount": 4
+    },
+    {
+      "tagName": "SECTION",
+      "className": "row home-latest-feed",
+      "id": "",
+      "title": "",
+      "childrenCount": 2
+    }
+  ]
+}

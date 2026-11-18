@@ -1,0 +1,30 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="seven-grad" x1="8" y1="12" x2="38" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38bdf8" />
+      <stop offset="0.5" stop-color="#818cf8" />
+      <stop offset="1" stop-color="#f472b6" />
+    </linearGradient>
+    <linearGradient id="ring-grad" x1="18" y1="12" x2="58" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f472b6" />
+      <stop offset="0.7" stop-color="#c084fc" />
+      <stop offset="1" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Dark container background with subtle rounded border -->
+  <rect width="64" height="64" rx="16" fill="#0c0d12" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+
+  <!-- Stylized katana 7 -->
+  <path d="M14 17C14 15.8954 14.8954 15 16 15H42C43.2384 15 44.1783 16.1415 43.9142 17.3503L36.8 50C36.5 51.2 35.5 52 34.3 52H28.5C27.2 52 26.2 50.8 26.4 49.5L31.2 27H16C14.8954 27 14 26.1046 14 25V17Z" fill="url(#seven-grad)" />
+
+  <!-- Speed slash cut -->
+  <path d="M12 32.5L46 25" stroke="#0c0d12" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Planetary orbital ring section -->
+  <path d="M38 18C47 21 52 28 50 36C48 44 40 48 30 47" stroke="url(#ring-grad)" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.85" />
+
+  <!-- Four-pointed sparkle star -->
+  <path d="M50 14C50 17 52 19 55 19C52 19 50 21 50 24C50 21 48 19 45 19C48 19 50 17 50 14Z" fill="#ff70d9" />
+  <circle cx="50" cy="19" r="1" fill="#ffffff" />
+</svg>

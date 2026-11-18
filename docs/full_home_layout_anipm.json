@@ -1,0 +1,1224 @@
+{
+  "navbar": {
+    "tag": "HEADER",
+    "className": "sitebar",
+    "items": [
+      {
+        "tag": "SPAN",
+        "className": "sitebar__shade",
+        "text": ""
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__brand",
+        "text": "ANI.PM"
+      },
+      {
+        "tag": "NAV",
+        "className": "sitebar__nav",
+        "text": "HomeBrowseLatestGenresMangaLibraryCommunityWatch TogetherMoviesMore"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Home"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Browse"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Latest"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Genres"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Manga"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Library"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Community"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Watch Together"
+      },
+      {
+        "tag": "A",
+        "className": "sitebar__link",
+        "text": "Movies"
+      },
+      {
+        "tag": "DIV",
+        "className": "sitebar__more",
+        "text": "More"
+      },
+      {
+        "tag": "BUTTON",
+        "className": "sitebar__link sitebar__more-btn",
+        "text": "More"
+      },
+      {
+        "tag": "SPAN",
+        "className": "sitebar__glide",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "sitebar__spacer",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "className": "sitebar__search",
+        "text": "Search animeCtrl K"
+      },
+      {
+        "tag": "DIV",
+        "className": "sitebar__actions",
+        "text": "Sign in"
+      },
+      {
+        "tag": "BUTTON",
+        "className": "yt-icon-button chat-launcher",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "className": "yt-icon-button",
+        "text": ""
+      },
+      {
+        "tag": "BUTTON",
+        "className": "yt-signin yt-signin--compact",
+        "text": "Sign in"
+      },
+      {
+        "tag": "BUTTON",
+        "className": "sitebar__pin",
+        "text": ""
+      }
+    ]
+  },
+  "sections": [
+    {
+      "tag": "DIV",
+      "className": "",
+      "id": "",
+      "height": 0,
+      "headings": [
+        {
+          "tag": "H1",
+          "text": "Watch anime free, subbed & dubbed",
+          "className": "sr-only"
+        },
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        },
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        },
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        },
+        {
+          "tag": "DIV",
+          "text": "Top \nWeekly\n Animes\nMAL\nAniList",
+          "className": "row-head-title"
+        },
+        {
+          "tag": "H3",
+          "text": "Top \nWeekly\n Animes",
+          "className": "row-h"
+        },
+        {
+          "tag": "SPAN",
+          "text": "Top \nWeekly\n Animes",
+          "className": "top-period-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "Weekly",
+          "className": "site-dropdown site-dropdown--title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "H3",
+          "text": "",
+          "className": "row-h"
+        }
+      ],
+      "buttonsOrFilters": [
+        {
+          "text": "",
+          "className": "backup-domain__close"
+        },
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control spot-nav-btn"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control spot-nav-btn"
+        },
+        {
+          "text": "salama the unicorn cupcake lady ᶻ 𝗓 𐰁:\nHIIII",
+          "className": "home-activity-pill__chat"
+        },
+        {
+          "text": "Weekly",
+          "className": "site-dropdown-trigger"
+        },
+        {
+          "text": "MAL",
+          "className": "top-source__btn"
+        },
+        {
+          "text": "AniList",
+          "className": "top-source__btn"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "carousel-edge-prev"
+        },
+        {
+          "text": "",
+          "className": "carousel-edge-next"
+        }
+      ],
+      "itemCount": 110
+    },
+    {
+      "tag": "SECTION",
+      "className": "spot",
+      "id": "",
+      "height": 620,
+      "headings": [
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        },
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        },
+        {
+          "tag": "H2",
+          "text": "",
+          "className": "spot-title"
+        }
+      ],
+      "buttonsOrFilters": [
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "Play",
+          "className": "btn btn-play"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  hero-library-status-trigger"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control spot-nav-btn"
+        },
+        {
+          "text": "",
+          "className": "btn btn-ghost spot-frost-control spot-nav-btn"
+        }
+      ],
+      "itemCount": 12
+    },
+    {
+      "tag": "SECTION",
+      "className": "row centered-carousel",
+      "id": "",
+      "height": 345,
+      "headings": [
+        {
+          "tag": "DIV",
+          "text": "Top \nWeekly\n Animes\nMAL\nAniList",
+          "className": "row-head-title"
+        },
+        {
+          "tag": "H3",
+          "text": "Top \nWeekly\n Animes",
+          "className": "row-h"
+        },
+        {
+          "tag": "SPAN",
+          "text": "Top \nWeekly\n Animes",
+          "className": "top-period-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "Weekly",
+          "className": "site-dropdown site-dropdown--title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        },
+        {
+          "tag": "SPAN",
+          "text": "",
+          "className": "cov-title-clip"
+        },
+        {
+          "tag": "A",
+          "text": "",
+          "className": "cov-title"
+        }
+      ],
+      "buttonsOrFilters": [
+        {
+          "text": "Weekly",
+          "className": "site-dropdown-trigger"
+        },
+        {
+          "text": "MAL",
+          "className": "top-source__btn"
+        },
+        {
+          "text": "AniList",
+          "className": "top-source__btn"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "library-status-trigger  cov-add"
+        },
+        {
+          "text": "",
+          "className": "carousel-edge-prev"
+        },
+        {
+          "text": "",
+          "className": "carousel-edge-next"
+        }
+      ],
+      "itemCount": 93
+    },
+    {
+      "tag": "SECTION",
+      "className": "row home-latest-feed",
+      "id": "",
+      "height": 400,
+      "headings": [
+        {
+          "tag": "H3",
+          "text": "",
+          "className": "row-h"
+        }
+      ],
+      "buttonsOrFilters": [],
+      "itemCount": 0
+    }
+  ]
+}

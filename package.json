@@ -1,0 +1,22 @@
+{
+  "name": "7anime-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "7Anime — Next-generation anime streaming and discovery platform",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "build": "npm run build:frontend && npm run build:backend",
+    "preview:frontend": "npm run preview --prefix frontend",
+    "typecheck:frontend": "npm run build --prefix frontend",
+    "typecheck:backend": "npm run typecheck --prefix backend",
+    "typecheck": "npm run typecheck:frontend && npm run typecheck:backend"
+  }
+}

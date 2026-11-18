@@ -1,0 +1,22 @@
+<svg width="460" height="120" viewBox="0 0 460 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bl-red" x1="0" y1="0" x2="460" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" />
+      <stop offset="0.6" stop-color="#fca5a5" />
+      <stop offset="1" stop-color="#ef4444" />
+    </linearGradient>
+  </defs>
+  <!-- Japanese Kanji Script -->
+  <text x="4" y="24" font-family="'Geist', system-ui, sans-serif" font-size="14" font-weight="900" fill="#ef4444" letter-spacing="6">
+    BLEACH 千年血戦篇
+  </text>
+  <!-- Main Title: BLEACH -->
+  <text x="4" y="86" font-family="'Geist', system-ui, sans-serif" font-size="68" font-weight="950" fill="url(#bl-red)" letter-spacing="3">
+    BLEACH
+  </text>
+  <!-- Arc Subtitle -->
+  <text x="6" y="112" font-family="'Geist Mono', monospace" font-size="12" font-weight="800" fill="#f87171" letter-spacing="2">
+    THOUSAND-YEAR BLOOD WAR — THE CALAMITY
+  </text>
+</svg>
+

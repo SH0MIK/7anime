@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./themes.css";
+@import "./layout.css";
+@import "./poster-card.css";
+@import "./home.css";
+@import "./pages.css";
+@import "./glassplayer.css";
+@import "./decor.css";

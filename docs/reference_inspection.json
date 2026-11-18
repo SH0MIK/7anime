@@ -1,0 +1,375 @@
+{
+  "anipm": {
+    "sitebar": {
+      "className": "sitebar",
+      "height": 56,
+      "computed": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "backdropFilter": "none",
+        "borderBottom": "0px solid rgb(229, 231, 235)"
+      },
+      "links": [
+        {
+          "text": "ANI.PM",
+          "tag": "A",
+          "className": "sitebar__brand"
+        },
+        {
+          "text": "Home",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Browse",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Latest",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Genres",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Manga",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Library",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Community",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Watch Together",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Movies",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "More",
+          "tag": "BUTTON",
+          "className": "sitebar__link sitebar__more-btn"
+        },
+        {
+          "text": "Search anime\nCtrl K",
+          "tag": "BUTTON",
+          "className": "sitebar__search"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "yt-icon-button chat-launcher"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "yt-icon-button"
+        },
+        {
+          "text": "Sign in",
+          "tag": "BUTTON",
+          "className": "yt-signin yt-signin--compact"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "sitebar__pin"
+        }
+      ]
+    },
+    "hero": {
+      "className": "library-status-trigger  hero-library-status-trigger",
+      "height": 48,
+      "innerHTMLSnippet": "<span class=\"library-status-trigger__icon plus\" aria-hidden=\"true\" style=\"opacity: 1;\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg></span>"
+    },
+    "heroLogos": [
+      {
+        "src": "https://ani.pm/logos/113415.avif",
+        "alt": "JUJUTSU KAISEN",
+        "className": "spot-logo",
+        "width": 560,
+        "height": 144
+      },
+      {
+        "src": "https://ani.pm/logos/t/2wgUnrYEGtbcpZCl83ta2hS8d6J.webp",
+        "alt": "Cyberpunk: Edgerunners 2",
+        "className": "spot-logo",
+        "width": 518,
+        "height": 144
+      },
+      {
+        "src": "https://ani.pm/logos/t/j9ZZ7WV5pwLLXbbebyGdMUxbqrc.webp",
+        "alt": "Black Clover Season 2",
+        "className": "spot-logo",
+        "width": 560,
+        "height": 144
+      },
+      {
+        "src": "https://ani.pm/logos/bleach-calamity.webp",
+        "alt": "Bleach: Thousand-Year Blood War - The Calamity",
+        "className": "spot-logo",
+        "width": 307,
+        "height": 144
+      }
+    ],
+    "cards": [
+      {
+        "className": "t10",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "t10-poster",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "18px",
+          "aspectRatio": "2 / 3"
+        }
+      },
+      {
+        "className": "poster-clip",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "18px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "poster-library-status-control",
+        "rect": {
+          "width": 210,
+          "height": 0
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "t10",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      }
+    ],
+    "bodyStyles": {
+      "fontFamily": "\"Geist Variable\", Geist, system-ui, sans-serif",
+      "backgroundColor": "rgb(0, 0, 0)",
+      "color": "rgb(255, 255, 255)"
+    }
+  },
+  "aninz": {
+    "sitebar": {
+      "className": "sitebar",
+      "height": 56,
+      "computed": {
+        "backgroundColor": "rgba(0, 0, 0, 0)",
+        "backdropFilter": "none",
+        "borderBottom": "0px solid rgb(229, 231, 235)"
+      },
+      "links": [
+        {
+          "text": "ANI.NZ",
+          "tag": "A",
+          "className": "sitebar__brand"
+        },
+        {
+          "text": "Home",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Browse",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Latest",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Genres",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Manga",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Library",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Community",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Watch Together",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "Movies",
+          "tag": "A",
+          "className": "sitebar__link"
+        },
+        {
+          "text": "More",
+          "tag": "BUTTON",
+          "className": "sitebar__link sitebar__more-btn"
+        },
+        {
+          "text": "Search anime\nCtrl K",
+          "tag": "BUTTON",
+          "className": "sitebar__search"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "yt-icon-button chat-launcher"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "yt-icon-button"
+        },
+        {
+          "text": "Sign in",
+          "tag": "BUTTON",
+          "className": "yt-signin yt-signin--compact"
+        },
+        {
+          "text": "",
+          "tag": "BUTTON",
+          "className": "sitebar__pin"
+        }
+      ]
+    },
+    "hero": {
+      "className": "library-status-trigger  hero-library-status-trigger",
+      "height": 48,
+      "innerHTMLSnippet": "<span class=\"library-status-trigger__icon plus\" aria-hidden=\"true\" style=\"opacity: 1;\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-plus\" aria-hidden=\"true\"><path d=\"M5 12h14\"></path><path d=\"M12 5v14\"></path></svg></span>"
+    },
+    "heroLogos": [
+      {
+        "src": "https://ani.nz/logos/113415.avif",
+        "alt": "JUJUTSU KAISEN",
+        "className": "spot-logo",
+        "width": 560,
+        "height": 144
+      },
+      {
+        "src": "https://ani.nz/logos/t/2wgUnrYEGtbcpZCl83ta2hS8d6J.webp",
+        "alt": "Cyberpunk: Edgerunners 2",
+        "className": "spot-logo",
+        "width": 518,
+        "height": 144
+      },
+      {
+        "src": "https://ani.nz/logos/t/j9ZZ7WV5pwLLXbbebyGdMUxbqrc.webp",
+        "alt": "Black Clover Season 2",
+        "className": "spot-logo",
+        "width": 560,
+        "height": 144
+      }
+    ],
+    "cards": [
+      {
+        "className": "t10",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "t10-poster",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "18px",
+          "aspectRatio": "2 / 3"
+        }
+      },
+      {
+        "className": "poster-clip",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "18px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "poster-library-status-control",
+        "rect": {
+          "width": 210,
+          "height": 0
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      },
+      {
+        "className": "t10",
+        "rect": {
+          "width": 210,
+          "height": 314
+        },
+        "computedStyle": {
+          "borderRadius": "0px",
+          "aspectRatio": "auto"
+        }
+      }
+    ],
+    "bodyStyles": {
+      "fontFamily": "\"Geist Variable\", Geist, system-ui, sans-serif",
+      "backgroundColor": "rgb(0, 0, 0)",
+      "color": "rgb(255, 255, 255)"
+    }
+  }
+}

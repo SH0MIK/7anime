@@ -1,0 +1,134 @@
+{
+  "title": "7Anime — Watch Anime Free in HD, English Sub and Dub",
+  "consoleErrors": [],
+  "domInspection": {
+    "sitebar": {
+      "height": 56,
+      "className": "sitebar",
+      "hasLogoImg": true,
+      "logoImgSrc": "http://localhost:4173/assets/branding/7anime-logo.png",
+      "logoWidth": 80,
+      "logoHeight": 34,
+      "searchButton": "Search anime\nCtrl K"
+    },
+    "backupBanner": {
+      "present": true,
+      "text": "7anime.ct.w  i  our backup domain",
+      "linkHref": "https://7anime.ct.ws",
+      "linkText": "7anime.ct.ws",
+      "containsOldDomain": false,
+      "containsNewBackup": true
+    },
+    "activityMirrors": {
+      "text": "Bookmark\n7Anime\n&\n7anime.ct.w",
+      "containsOldDomain": false
+    },
+    "footer": {
+      "copy": "© 2026 7Anime",
+      "disclaimer": "7Anime does not host any media files. It provides links to third-party services. Legal concerns about those files should be addressed directly to the hosts and providers responsible for them. 7Anime bears no responsibility for media displayed by those providers.",
+      "containsOldDomain": false
+    },
+    "toonkotsuBanner": {
+      "present": false
+    },
+    "hero": {
+      "height": 882,
+      "hasSpotLogoImg": true,
+      "spotLogoSrc": "http://localhost:4173/assets/logos/j9ZZ7WV5pwLLXbbebyGdMUxbqrc.webp",
+      "spotLogoWidth": 560,
+      "spotLogoHeight": 144,
+      "playBtnText": "Play",
+      "hasLibraryTrigger": true
+    },
+    "cards": [
+      {
+        "className": "t10",
+        "width": 211,
+        "height": 316,
+        "posterAspect": "2 / 3",
+        "title": "One Piece",
+        "hasAudioPair": true,
+        "hasScore": true
+      },
+      {
+        "className": "t10",
+        "width": 211,
+        "height": 316,
+        "posterAspect": "2 / 3",
+        "title": "Naruto: Shippuden",
+        "hasAudioPair": true,
+        "hasScore": true
+      },
+      {
+        "className": "t10",
+        "width": 211,
+        "height": 316,
+        "posterAspect": "2 / 3",
+        "title": "Black Clover",
+        "hasAudioPair": true,
+        "hasScore": true
+      },
+      {
+        "className": "t10",
+        "width": 211,
+        "height": 316,
+        "posterAspect": "2 / 3",
+        "title": "Bleach",
+        "hasAudioPair": true,
+        "hasScore": true
+      },
+      {
+        "className": "t10",
+        "width": 211,
+        "height": 316,
+        "posterAspect": "2 / 3",
+        "title": "Black Clover Season 2",
+        "hasAudioPair": true,
+        "hasScore": true
+      }
+    ],
+    "rows": [
+      {
+        "className": "spot",
+        "heading": ""
+      },
+      {
+        "className": "row centered-carousel ",
+        "heading": "Top\nWeekly\nAnimes"
+      },
+      {
+        "className": "row centered-carousel ",
+        "heading": "Top\nWeekly\nMovies"
+      },
+      {
+        "className": "row centered-carousel ",
+        "heading": "Top\nRomance\nAnimes"
+      },
+      {
+        "className": "row centered-carousel ",
+        "heading": "New\nAnimes"
+      },
+      {
+        "className": "row centered-carousel ",
+        "heading": "Most anticipated"
+      },
+      {
+        "className": "community-section",
+        "heading": "Newest\nComments"
+      },
+      {
+        "className": "home-latest-feed",
+        "heading": "Latest Episodes"
+      },
+      {
+        "className": "home-latest-feed",
+        "heading": "Today's Schedule"
+      }
+    ],
+    "overflowCheck": {
+      "windowWidth": 1440,
+      "documentScrollWidth": 1440,
+      "hasOverflow": false
+    }
+  }
+}

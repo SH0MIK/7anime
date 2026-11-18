@@ -1,0 +1,22 @@
+<svg width="460" height="120" viewBox="0 0 460 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="csm-grad" x1="0" y1="0" x2="460" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f97316" />
+      <stop offset="0.6" stop-color="#fb923c" />
+      <stop offset="1" stop-color="#ffffff" />
+    </linearGradient>
+  </defs>
+  <!-- Kanji -->
+  <text x="4" y="24" font-family="'Geist', system-ui, sans-serif" font-size="14" font-weight="900" fill="#f97316" letter-spacing="6">
+    チェンソーマン 劇場版
+  </text>
+  <!-- Main Title -->
+  <text x="4" y="80" font-family="'Geist', system-ui, sans-serif" font-size="50" font-weight="950" font-style="italic" fill="url(#csm-grad)" letter-spacing="1">
+    CHAINSAW MAN
+  </text>
+  <!-- Subtitle -->
+  <text x="6" y="108" font-family="'Geist Mono', monospace" font-size="13" font-weight="800" fill="#ffffff" letter-spacing="4">
+    THE MOVIE : REZE ARC
+  </text>
+</svg>
+
