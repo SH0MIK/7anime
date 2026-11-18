@@ -32,6 +32,7 @@ import {
 import { AniListService, type HomepageFeedData } from '@/src/services/anilist';
 import { SpotlightSkeleton, RailSkeleton, ErrorState } from '@/src/components/Skeletons';
 import { apiClient } from '@/src/services/apiClient';
+import type { RecentAiredEpisodeItem } from '@7anime/shared';
 
 const TIMEFRAMES: { key: TimeframeKey; labelKey: string }[] = [
   { key: 'today', labelKey: 'home.today' },
@@ -76,6 +77,7 @@ export const HomePage: React.FC = () => {
 
   // Live AniList data state
   const [feedData, setFeedData] = useState<HomepageFeedData | null>(null);
+  const [recentAiring, setRecentAiring] = useState<RecentAiredEpisodeItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,8 +85,16 @@ export const HomePage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await AniListService.getHomepageFeed();
-      setFeedData(data);
+      const [feedRes, recentRes] = await Promise.allSettled([
+        AniListService.getHomepageFeed(),
+        apiClient.getRecentAiring(1, 12),
+      ]);
+      if (feedRes.status === 'fulfilled') {
+        setFeedData(feedRes.value);
+      }
+      if (recentRes.status === 'fulfilled') {
+        setRecentAiring(recentRes.value);
+      }
     } catch (err: unknown) {
       console.error('[HomePage] Failed to fetch AniList homepage feed:', err);
       const errMsg = err instanceof Error ? err.message : 'Failed to load live catalog from AniList';
@@ -211,18 +221,30 @@ export const HomePage: React.FC = () => {
   }, [feedData]);
 
   const latestEpisodes = useMemo(() => {
+    if (recentAiring.length > 0) {
+      return recentAiring.map((ep) => ({
+        routeId: ep.routeId,
+        title: ep.title,
+        episode: ep.episode,
+        thumbnail: ep.thumbnail || ep.poster || null,
+        duration: ep.duration || '24m',
+        timeAgo: ep.timeAgoText || 'Recently',
+        hasSub: ep.hasSub,
+        hasDub: ep.hasDub,
+      }));
+    }
     if (!feedData) return [];
-    return feedData.airing.slice(0, 12).map((a, idx) => ({
+    return feedData.airing.slice(0, 12).map((a) => ({
       routeId: a.routeId,
       title: a.title,
       episode: a.subCount || 1,
       thumbnail: a.banner || a.poster,
       duration: typeof a.duration === 'string' ? a.duration : '24:00',
-      timeAgo: `${(idx * 15 + 10)}m ago`,
+      timeAgo: 'Recently',
       hasSub: true,
       hasDub: a.dubCount > 0,
     }));
-  }, [feedData]);
+  }, [recentAiring, feedData]);
 
   const commentsToShow = useMemo(() => {
     if (!feedData) return [];

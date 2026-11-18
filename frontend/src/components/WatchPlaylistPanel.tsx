@@ -26,6 +26,7 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
   const [dubOnly, setDubOnly] = useState(false);
   const [hideThumbs, setHideThumbs] = useState(false);
   const [gridView, setGridView] = useState(false);
+  const [selectedChunk, setSelectedChunk] = useState<string>('all');
   const [epLimit, setEpLimit] = useState(() => Math.max(60, currentEp + 20));
 
   useEffect(() => {
@@ -34,7 +35,18 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
 
   useEffect(() => {
     setEpLimit(Math.max(60, currentEp + 20));
-  }, [search, selectedArc, selectedSeason, hideFiller, subOnly, dubOnly, oldestFirst]);
+  }, [search, selectedArc, selectedSeason, hideFiller, subOnly, dubOnly, oldestFirst, selectedChunk]);
+
+  const epChunks = useMemo(() => {
+    if (episodes.length <= 100) return [];
+    const chunks: Array<{ label: string; start: number; end: number }> = [];
+    for (let i = 0; i < episodes.length; i += 100) {
+      const start = i + 1;
+      const end = Math.min(i + 100, episodes.length);
+      chunks.push({ label: `${start}-${end}`, start, end });
+    }
+    return chunks;
+  }, [episodes.length]);
 
   const seasons = useMemo(() => {
     const uniq = Array.from(new Set(episodes.map((e) => e.season))).sort((a, b) => a - b);
@@ -52,7 +64,14 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
 
   const filtered = useMemo(() => {
     const audioFilter: 'all' | 'sub' | 'dub' = subOnly ? 'sub' : dubOnly ? 'dub' : 'all';
-    let list = filterEpisodeList(episodes, {
+    let list = episodes;
+    if (selectedChunk !== 'all' && !search.trim()) {
+      const chunk = epChunks.find((c) => c.label === selectedChunk);
+      if (chunk) {
+        list = list.filter((e) => e.number >= chunk.start && e.number <= chunk.end);
+      }
+    }
+    list = filterEpisodeList(list, {
       query: search,
       arc: selectedArc === 'All arcs' ? 'all' : selectedArc,
       hideFiller,
@@ -63,7 +82,7 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
       list = list.filter((e) => e.season === Number(selectedSeason));
     }
     return list;
-  }, [episodes, search, selectedArc, hideFiller, subOnly, dubOnly, oldestFirst, selectedSeason]);
+  }, [episodes, search, selectedArc, hideFiller, subOnly, dubOnly, oldestFirst, selectedSeason, selectedChunk, epChunks]);
 
   const kindColor = (kind: EpisodeItem['kind']) => {
     if (kind === 'canon') return '#4ade80';
@@ -199,6 +218,32 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
         </button>
       </div>
 
+      {epChunks.length > 0 && !search.trim() && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '2px 0 4px' }}>
+          <button
+            type="button"
+            className="watch-pill"
+            aria-pressed={selectedChunk === 'all'}
+            onClick={() => setSelectedChunk('all')}
+            style={{ height: 26, fontSize: 11, padding: '0 8px' }}
+          >
+            All
+          </button>
+          {epChunks.map((chunk) => (
+            <button
+              key={chunk.label}
+              type="button"
+              className="watch-pill"
+              aria-pressed={selectedChunk === chunk.label}
+              onClick={() => setSelectedChunk(chunk.label)}
+              style={{ height: 26, fontSize: 11, padding: '0 8px' }}
+            >
+              {chunk.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',
@@ -223,7 +268,11 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
         </span>
       </div>
 
-      {gridView ? (
+      {filtered.length === 0 ? (
+        <div style={{ padding: '24px 12px', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: 10, color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+          {search ? `No episodes matching "${search}".` : 'Detailed episode list unavailable.'}
+        </div>
+      ) : gridView ? (
         <div className="ep-num-grid ep-num-grid--panel">
           {filtered.slice(0, gridView ? epLimit * 2 : epLimit).map((ep) => {
             const active = ep.number === currentEp;

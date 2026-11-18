@@ -1,22 +1,35 @@
 import { config } from '../../config/env.js';
 import { MemoryCacheService } from './memory-cache.service.js';
 
+export const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60; // 604,800 seconds (7 days)
+export const NEGATIVE_CACHE_SECONDS = 24 * 60 * 60; // 24 hours for confirmed missing records
+
+export interface CacheEnvelope<T> {
+  data: T;
+  cachedAt: number;
+  source?: string;
+  ttlSeconds: number;
+}
+
 /**
- * Dual-tier Cache Service:
- * Tier 1: Upstash Redis over REST (Persistent, Distributed)
- * Tier 2: In-Memory Cache (Zero-latency fallback if Redis is down or unconfigured)
+ * Global Shared Redis Cache Service:
+ * - Shared across all users (single source of truth for public anime metadata).
+ * - Tier 1: Upstash Redis over REST (Persistent, Distributed)
+ * - Tier 2: In-Memory Cache (Zero-latency fallback when Redis is unconfigured or unreachable)
+ * - In-flight request deduplication (cache stampede prevention).
  */
 export class RedisCacheService {
   private memoryFallback: MemoryCacheService;
   private isConfigured: boolean;
   private restUrl?: string;
   private restToken?: string;
+  private inFlightRequests: Map<string, Promise<any>> = new Map();
 
   constructor() {
-    this.restUrl = config.upstashRedisRestUrl?.trim();
-    this.restToken = config.upstashRedisRestToken?.trim();
+    this.restUrl = (config.upstashRedisRestUrl || '').replace(/^["']|["']$/g, '').trim();
+    this.restToken = (config.upstashRedisRestToken || '').replace(/^["']|["']$/g, '').trim();
     this.isConfigured = Boolean(this.restUrl && this.restToken);
-    this.memoryFallback = new MemoryCacheService(60 * 60 * 1000); // 1-hour in-memory fallback
+    this.memoryFallback = new MemoryCacheService(SEVEN_DAYS_SECONDS * 1000);
   }
 
   /**
@@ -26,7 +39,7 @@ export class RedisCacheService {
     if (this.isConfigured && this.restUrl && this.restToken) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), 3500);
 
         const res = await fetch(`${this.restUrl}/get/${encodeURIComponent(key)}`, {
           headers: {
@@ -41,7 +54,6 @@ export class RedisCacheService {
           const json = (await res.json()) as any;
           if (json && json.result !== null && json.result !== undefined) {
             try {
-              // Upstash stores objects as JSON strings or raw strings
               if (typeof json.result === 'string') {
                 return JSON.parse(json.result) as T;
               }
@@ -53,7 +65,7 @@ export class RedisCacheService {
           return null;
         }
       } catch (err) {
-        console.warn(`[RedisCacheService] Redis GET failed for key "${key}", falling back to memory:`, (err as Error).message);
+        console.warn(`[RedisCacheService] Redis GET failed for key "${key}", using memory fallback:`, (err as Error).message);
       }
     }
 
@@ -63,16 +75,17 @@ export class RedisCacheService {
 
   /**
    * Stores an item in Upstash Redis and local memory cache with TTL in seconds.
+   * Default TTL is 7 days (604,800 seconds).
    */
-  public async set<T>(key: string, value: T, ttlSeconds: number = 86400 * 30): Promise<boolean> {
-    // Store in memory cache (convert seconds to milliseconds)
+  public async set<T>(key: string, value: T, ttlSeconds: number = SEVEN_DAYS_SECONDS): Promise<boolean> {
+    // Always store in memory fallback
     this.memoryFallback.set(key, value, ttlSeconds * 1000);
 
     if (this.isConfigured && this.restUrl && this.restToken) {
       try {
         const payload = typeof value === 'object' ? JSON.stringify(value) : String(value);
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), 3500);
 
         const url = ttlSeconds > 0
           ? `${this.restUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(payload)}?ex=${ttlSeconds}`
@@ -97,6 +110,43 @@ export class RedisCacheService {
     }
 
     return true;
+  }
+
+  /**
+   * Cache-aside with In-Flight Request Deduplication (prevents cache stampede).
+   */
+  public async getOrSet<T>(
+    key: string,
+    fetchFn: () => Promise<T>,
+    ttlSeconds: number = SEVEN_DAYS_SECONDS
+  ): Promise<T> {
+    // 1. Check existing cache
+    const cached = await this.get<T>(key);
+    if (cached !== null && cached !== undefined) {
+      return cached;
+    }
+
+    // 2. Check if identical request is currently in-flight
+    const inFlight = this.inFlightRequests.get(key);
+    if (inFlight) {
+      return inFlight as Promise<T>;
+    }
+
+    // 3. Execute fetch and broadcast to concurrent callers
+    const fetchPromise = (async (): Promise<T> => {
+      try {
+        const result = await fetchFn();
+        if (result !== null && result !== undefined) {
+          await this.set(key, result, ttlSeconds);
+        }
+        return result;
+      } finally {
+        this.inFlightRequests.delete(key);
+      }
+    })();
+
+    this.inFlightRequests.set(key, fetchPromise);
+    return fetchPromise;
   }
 
   /**
@@ -132,7 +182,7 @@ export class RedisCacheService {
   }
 
   /**
-   * Checks if key exists.
+   * Checks if key exists in memory or Redis.
    */
   public async exists(key: string): Promise<boolean> {
     const memoryHit = this.memoryFallback.has(key);

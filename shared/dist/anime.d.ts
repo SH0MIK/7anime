@@ -43,6 +43,11 @@ export interface AnimeTrailer {
     type?: string;
     official?: boolean;
 }
+export interface NextAiringEpisode {
+    airingAt: number;
+    timeUntilAiring: number;
+    episode: number;
+}
 export interface ResolvedAnime {
     id: string;
     routeId: string;
@@ -53,6 +58,16 @@ export interface ResolvedAnime {
     status?: string;
     season?: string;
     seasonYear?: number;
+    startDate?: {
+        year?: number;
+        month?: number;
+        day?: number;
+    };
+    endDate?: {
+        year?: number;
+        month?: number;
+        day?: number;
+    };
     episodes?: number;
     duration?: number;
     genres: string[];
@@ -63,11 +78,7 @@ export interface ResolvedAnime {
     metadataSources: string[];
     popularity?: number;
     isAdult?: boolean;
-    nextAiringEpisode?: {
-        airingAt: number;
-        timeUntilAiring: number;
-        episode: number;
-    };
+    nextAiringEpisode?: NextAiringEpisode;
 }
 export interface ArtworkResolution {
     logo?: string;
@@ -84,4 +95,42 @@ export interface AnimeSearchResult {
     total: number;
     page: number;
     hasMore: boolean;
+}
+export interface VerifiedEpisode {
+    number: number;
+    title?: string;
+    overview?: string;
+    airDate?: string;
+    duration?: number;
+    thumbnail?: string;
+    isFiller?: boolean;
+    hasSub?: boolean;
+    hasDub?: boolean;
+    source: 'tmdb' | 'anilist' | 'official';
+}
+export type CatalogueCompleteness = 'complete' | 'partial' | 'unavailable';
+export interface AnimeEpisodeCatalogue {
+    anilistId: number;
+    totalAnnouncedEpisodes: number | null;
+    airedEpisodeCount: number;
+    verifiedRecordsCount: number;
+    completenessStatus: CatalogueCompleteness;
+    nextUpcomingEpisode: NextAiringEpisode | null;
+    hasEpisodeList: boolean;
+    episodes: VerifiedEpisode[];
+    source: string;
+}
+export interface RecentAiredEpisodeItem {
+    id: number;
+    anilistId: number;
+    routeId: string;
+    title: string;
+    episode: number;
+    airingAt: number;
+    timeAgoText?: string;
+    thumbnail?: string;
+    poster?: string;
+    duration?: string;
+    hasSub: boolean;
+    hasDub: boolean;
 }

@@ -21,7 +21,8 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react';
-import type { ResolvedAnime } from '@7anime/shared';
+import type { ResolvedAnime, AnimeEpisodeCatalogue } from '@7anime/shared';
+import { useAiringCountdown } from '@/src/utils/useAiringCountdown';
 import { useApp } from '@/src/context/AppContext';
 import {
   MANGA_CATALOG,
@@ -36,9 +37,9 @@ import { AvatarBadge } from '@/src/components/BrandMark';
 import { CinematicTrailerBackground } from '@/src/components/CinematicTrailerBackground';
 import { apiClient } from '@/src/services/apiClient';
 import { ArtworkResolver, ComprehensiveArtwork } from '@/src/services/artworkResolver';
-import { AniListService, generateEpisodesForAniList } from '@/src/services/anilist';
+import { AniListService } from '@/src/services/anilist';
 import { ErrorState } from '@/src/components/Skeletons';
-import type { AnimeTitle, CommentItem } from '@/src/types/anime';
+import type { AnimeTitle, CommentItem, EpisodeItem } from '@/src/types/anime';
 
 type DetailTab = 'episodes' | 'related' | 'manga' | 'similar' | 'comments' | 'downloads';
 
@@ -68,6 +69,8 @@ export const AnimeDetailPage: React.FC = () => {
   const [anime, setAnime] = useState<AnimeTitle | null>(null);
   const [resolvedAnime, setResolvedAnime] = useState<ResolvedAnime | null>(null);
   const [artwork, setArtwork] = useState<ComprehensiveArtwork | null>(null);
+  const [episodesData, setEpisodesData] = useState<AnimeEpisodeCatalogue | null>(null);
+  const airingCountdown = useAiringCountdown(resolvedAnime?.nextAiringEpisode ?? null);
   const [liveRelations, setLiveRelations] = useState<AnimeTitle[]>([]);
   const [liveRecommendations, setLiveRecommendations] = useState<AnimeTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -98,13 +101,18 @@ export const AnimeDetailPage: React.FC = () => {
     }
 
     try {
-      const [backendResolved, anilistDetails] = await Promise.allSettled([
+      const [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
         apiClient.getAnimeById(targetId),
         AniListService.getAnimeDetails(targetId),
+        apiClient.getEpisodes(targetId),
       ]);
 
       const backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
       const anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
+      const catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+      if (catData) {
+        setEpisodesData(catData);
+      }
 
       if (!backendData && !anilistData) {
         throw new Error(`Failed to load anime with ID ${targetId}`);
@@ -115,9 +123,16 @@ export const AnimeDetailPage: React.FC = () => {
         setLiveRecommendations(anilistData.recommendations);
       }
 
+      const verifiedEpCount = catData?.totalAnnouncedEpisodes ?? catData?.airedEpisodeCount ?? backendData?.episodes ?? anilistData?.anime?.episodeCount ?? 0;
+      const verifiedSubCount = catData?.airedEpisodeCount ?? verifiedEpCount;
+
       let base: AnimeTitle;
       if (anilistData) {
-        base = anilistData.anime;
+        base = {
+          ...anilistData.anime,
+          episodeCount: verifiedEpCount || anilistData.anime.episodeCount,
+          subCount: verifiedSubCount || anilistData.anime.subCount,
+        };
       } else {
         base = {
           id: targetId,
@@ -134,9 +149,9 @@ export const AnimeDetailPage: React.FC = () => {
           type: backendData!.format || 'TV',
           genres: backendData!.genres || [],
           studios: backendData!.studios || [],
-          episodeCount: backendData!.episodes || 12,
-          subCount: backendData!.episodes || 12,
-          dubCount: Math.floor((backendData!.episodes || 12) * 0.85),
+          episodeCount: verifiedEpCount,
+          subCount: verifiedSubCount,
+          dubCount: 0,
           synopsis: backendData!.description || '',
           anilistId: targetId,
         };
@@ -166,10 +181,25 @@ export const AnimeDetailPage: React.FC = () => {
     loadDetailData();
   }, [id]);
 
-  const allEpisodes = useMemo(() => {
-    if (!anime) return [];
-    return generateEpisodesForAniList(anime, STILLS_POOL);
-  }, [anime]);
+  const allEpisodes: EpisodeItem[] = useMemo(() => {
+    if (!episodesData?.episodes || episodesData.episodes.length === 0) {
+      return [];
+    }
+    return episodesData.episodes.map((ep) => ({
+      number: ep.number,
+      title: ep.title || `Episode ${ep.number}`,
+      synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+      aired: ep.airDate || `${anime?.year || ''}`,
+      duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+      durationSec: ep.duration ? ep.duration * 60 : 1440,
+      hasSub: true,
+      hasDub: Boolean(ep.hasDub),
+      kind: ep.isFiller ? 'filler' : 'canon',
+      arc: 'Season 1',
+      season: 1,
+      thumbnail: ep.thumbnail || null,
+    }));
+  }, [episodesData, anime]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('episodes');
   const [expandedSyn, setExpandedSyn] = useState(false);
@@ -183,6 +213,7 @@ export const AnimeDetailPage: React.FC = () => {
   const [gridView, setGridView] = useState(false);
   const [audioFilter, setAudioFilter] = useState<'all' | 'sub' | 'dub'>('all');
   const [epLimit, setEpLimit] = useState(60);
+  const [epRange, setEpRange] = useState<string>('all');
   const [showAllTags, setShowAllTags] = useState(false);
   const [comments, setComments] = useState<CommentItem[]>(() => [
     {
@@ -220,29 +251,47 @@ export const AnimeDetailPage: React.FC = () => {
 
   useEffect(() => {
     setEpLimit(60);
-  }, [id, arcFilter, epSearch, hideFiller, audioFilter]);
+  }, [id, arcFilter, epSearch, hideFiller, audioFilter, epRange]);
 
   const arcs = useMemo(() => Array.from(new Set(allEpisodes.map((e) => e.arc))), [allEpisodes]);
   const fillerCount = useMemo(() => allEpisodes.filter((e) => e.kind === 'filler').length, [allEpisodes]);
 
-  const filteredEpisodes = useMemo(
-    () =>
-      filterEpisodeList(allEpisodes, {
-        arc: arcFilter,
-        query: epSearch,
-        sortOrder,
-        hideFiller,
-        audioFilter,
-      }),
-    [allEpisodes, arcFilter, epSearch, sortOrder, hideFiller, audioFilter]
-  );
+  const epChunks = useMemo(() => {
+    if (allEpisodes.length <= 100) return [];
+    const chunks: Array<{ label: string; start: number; end: number }> = [];
+    for (let i = 0; i < allEpisodes.length; i += 100) {
+      const start = i + 1;
+      const end = Math.min(i + 100, allEpisodes.length);
+      chunks.push({ label: `${start} - ${end}`, start, end });
+    }
+    return chunks;
+  }, [allEpisodes.length]);
+
+  const filteredEpisodes = useMemo(() => {
+    let list = allEpisodes;
+    if (epRange !== 'all' && !epSearch.trim()) {
+      const selectedChunk = epChunks.find((c) => c.label === epRange);
+      if (selectedChunk) {
+        list = list.filter((e) => e.number >= selectedChunk.start && e.number <= selectedChunk.end);
+      }
+    }
+    return filterEpisodeList(list, {
+      arc: arcFilter,
+      query: epSearch,
+      sortOrder,
+      hideFiller,
+      audioFilter,
+    });
+  }, [allEpisodes, epRange, epChunks, arcFilter, epSearch, sortOrder, hideFiller, audioFilter]);
 
   const similarTitles = liveRecommendations;
   const relatedTitles = liveRelations;
   const displayTitle = anime ? getDisplayTitle(anime, contentPrefs.titleLanguage === 'original') : '';
   const isLiked = anime ? library.likedIds.includes(anime.routeId) : false;
   const isOngoing = anime ? (anime.status.toLowerCase().includes('releas') || anime.status.toLowerCase().includes('air')) : false;
-  const estimatedViews = anime ? (anime.id * 94321 + anime.episodeCount * 1842).toLocaleString() : '0';
+  const estimatedViews = resolvedAnime?.popularity
+    ? resolvedAnime.popularity.toLocaleString()
+    : (anime ? (anime.id * 1420).toLocaleString() : '0');
 
   const kindColor = (kind: 'canon' | 'mixed' | 'filler') => {
     if (kind === 'canon') return '#4ade80';
@@ -312,8 +361,39 @@ export const AnimeDetailPage: React.FC = () => {
                 <div className="detail-sidebar-row__val">{anime.type}</div>
               </div>
               <div>
-                <div className="detail-sidebar-row__label">Episodes</div>
-                <div className="detail-sidebar-row__val">{anime.episodeCount || '?'}</div>
+                <div className="detail-sidebar-row__label">Total Episodes</div>
+                <div className="detail-sidebar-row__val">
+                  {episodesData?.totalAnnouncedEpisodes
+                    ? episodesData.totalAnnouncedEpisodes.toLocaleString()
+                    : isOngoing
+                    ? 'Ongoing (TBA)'
+                    : anime.episodeCount > 0
+                    ? anime.episodeCount.toLocaleString()
+                    : '—'}
+                </div>
+              </div>
+              {episodesData?.airedEpisodeCount != null && (
+                <div>
+                  <div className="detail-sidebar-row__label">Aired Episodes</div>
+                  <div className="detail-sidebar-row__val">
+                    {episodesData.airedEpisodeCount.toLocaleString()}
+                  </div>
+                </div>
+              )}
+              <div>
+                <div className="detail-sidebar-row__label">Available Records</div>
+                <div className="detail-sidebar-row__val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span>{allEpisodes.length.toLocaleString()}</span>
+                  {episodesData?.completenessStatus === 'complete' ? (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80', fontWeight: 600 }}>
+                      Complete
+                    </span>
+                  ) : episodesData?.completenessStatus === 'partial' ? (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(250, 204, 21, 0.15)', color: '#facc15', fontWeight: 600 }}>
+                      Partial
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div>
                 <div className="detail-sidebar-row__label">Duration</div>
@@ -458,10 +538,10 @@ export const AnimeDetailPage: React.FC = () => {
               {anime.episodeCount > 0 && (
                 <span className="spot-meta-frost">{anime.episodeCount} Episodes</span>
               )}
-              {isOngoing && (
+              {airingCountdown && (
                 <span className="spot-meta-frost" style={{ color: '#9cc3ff' }}>
                   <Clock size={12} />
-                  <span>Next ep in 3d 14h</span>
+                  <span>{airingCountdown}</span>
                 </span>
               )}
               {anime.type && <span className="spot-meta-frost">{anime.type}</span>}
@@ -763,7 +843,70 @@ export const AnimeDetailPage: React.FC = () => {
                   </div>
                 </div>
 
-                {gridView ? (
+                {/* Catalogue Completeness and Count Bar */}
+                {episodesData && (
+                  <div style={{ margin: '14px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
+                    <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>
+                        Showing <strong>{filteredEpisodes.length.toLocaleString()}</strong> of <strong>{allEpisodes.length.toLocaleString()}</strong> verified episodes
+                      </span>
+                      {episodesData.completenessStatus === 'complete' && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80', fontWeight: 600 }}>
+                          Complete Verified Catalogue
+                        </span>
+                      )}
+                      {episodesData.completenessStatus === 'partial' && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(250, 204, 21, 0.15)', color: '#facc15', fontWeight: 600 }}>
+                          Partial Catalogue ({episodesData.verifiedRecordsCount} of {episodesData.airedEpisodeCount} Aired)
+                        </span>
+                      )}
+                      {episodesData.completenessStatus === 'unavailable' && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', fontWeight: 600 }}>
+                          Catalogue Unavailable
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Episode Range Selector for Long Series (e.g. One Piece, Bleach) */}
+                {epChunks.length > 0 && !epSearch.trim() && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0 14px' }}>
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      aria-pressed={epRange === 'all'}
+                      onClick={() => setEpRange('all')}
+                      style={{ height: 30, fontSize: 11.5, padding: '0 12px' }}
+                    >
+                      All ({allEpisodes.length.toLocaleString()})
+                    </button>
+                    {epChunks.map((chunk) => (
+                      <button
+                        key={chunk.label}
+                        type="button"
+                        className="watch-pill"
+                        aria-pressed={epRange === chunk.label}
+                        onClick={() => setEpRange(chunk.label)}
+                        style={{ height: 30, fontSize: 11.5, padding: '0 12px' }}
+                      >
+                        {chunk.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {filteredEpisodes.length === 0 ? (
+                  <div style={{ padding: '36px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: 14, marginTop: 14 }}>
+                    <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+                      {epSearch
+                        ? `No episodes matching "${epSearch}".`
+                        : anime?.episodeCount
+                          ? `Total verified episodes: ${anime.episodeCount}. Detailed individual episode catalogue is currently unavailable for this title.`
+                          : 'No episode records available.'}
+                    </p>
+                  </div>
+                ) : gridView ? (
                   <div className="ep-num-grid ep-num-grid--detail">
                     {filteredEpisodes.slice(0, epLimit * 2).map((ep) => (
                       <Link

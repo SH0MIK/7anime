@@ -30,13 +30,7 @@ interface GlassPlayerProps {
   hasNext: boolean;
 }
 
-const SAMPLE_CAPTIONS = [
-  { start: 0.5, end: 4.5, text: 'The Grand Line awaits beyond Reverse Mountain.' },
-  { start: 4.6, end: 9.2, text: 'Set your sails — our next adventure begins right now!' },
-  { start: 9.4, end: 14.2, text: 'Even against impossible odds, a promise made to a friend never breaks.' },
-  { start: 14.4, end: 19.8, text: 'Stay locked in — new horizons are waiting just ahead.' },
-  { start: 20.0, end: 24.5, text: 'To be continued in the next episode...' },
-];
+const SAMPLE_CAPTIONS: Array<{ start: number; end: number; text: string }> = [];
 
 export const GlassPlayer: React.FC<GlassPlayerProps> = ({
   anime,
@@ -220,22 +214,16 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
           }
         }}
       >
-        <video
-          ref={videoRef}
-          className="glassplayer__video"
-          src="/assets/media/sample-episode.mp4"
-          poster={episode.thumbnail ?? anime.banner ?? anime.poster}
-          playsInline
-          muted={muted}
-          onClick={togglePlay}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={() => {
-            if (videoRef.current?.duration) setDuration(videoRef.current.duration);
-          }}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={handleEnded}
-        />
+        {/* Phase 9: Player placeholder preserves layout dimensions with a blank iframe (no src, no srcDoc, no placeholder videos) */}
+        <div className="glassplayer__blank-placeholder" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#0b0d14' }}>
+          <iframe
+            className="glassplayer__blank-iframe"
+            title="Anime Player Placeholder"
+            style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }}
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+        </div>
 
         {!playing && (
           <div

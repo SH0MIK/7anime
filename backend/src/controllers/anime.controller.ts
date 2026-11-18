@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
+import { config } from '../config/env.js';
 import { AniListProvider } from '../services/metadata/providers/anilist.provider.js';
 import { AnimeResolverService } from '../services/metadata/resolver/anime-resolver.service.js';
 import { ExternalIdResolverService } from '../services/metadata/resolver/external-id-resolver.service.js';
 import { LogoResolverService } from '../services/metadata/resolver/logo-resolver.service.js';
+import { EpisodeResolverService } from '../services/metadata/resolver/episode-resolver.service.js';
+import { anilistBreaker, malBreaker, tmdbBreaker } from '../services/metadata/resolver/circuit-breaker.service.js';
+import { redisCache } from '../services/cache/redis-cache.service.js';
 import { AnimeSearchResult } from '@7anime/shared';
 
 export class AnimeController {
@@ -72,6 +76,30 @@ export class AnimeController {
       res.status(500).json({
         success: false,
         error: 'Failed to fetch trending anime.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/anime/recent-airing?page=&limit=
+   * Returns real recently aired episodes directly from AniList schedule.
+   */
+  public static async getRecentAiring(req: Request, res: Response): Promise<void> {
+    try {
+      const page = parseInt(req.query.page as string || '1', 10);
+      const limit = Math.min(parseInt(req.query.limit as string || '12', 10), 24);
+
+      const recentEpisodes = await AniListProvider.getRecentAiringEpisodes(page, limit);
+
+      res.json({
+        success: true,
+        data: recentEpisodes,
+      });
+    } catch (err) {
+      console.error('[AnimeController.getRecentAiring] Error:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch recent airing episodes.',
       });
     }
   }
@@ -235,6 +263,87 @@ export class AnimeController {
         success: false,
         error: 'Failed to resolve anime artwork.',
       });
+    }
+  }
+
+  /**
+   * GET /api/anime/:anilistId/episodes
+   * Retrieves verified episode catalogue without fabricated cards or fake filler tags.
+   */
+  public static async getEpisodes(req: Request, res: Response): Promise<void> {
+    try {
+      const idParam = Array.isArray(req.params.anilistId) ? req.params.anilistId[0] : req.params.anilistId;
+      const anilistId = parseInt(idParam || '', 10);
+      if (isNaN(anilistId) || anilistId <= 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid anime ID parameter.',
+        });
+        return;
+      }
+
+      const catalogue = await EpisodeResolverService.resolveEpisodes(anilistId);
+      if (!catalogue) {
+        res.status(404).json({
+          success: false,
+          error: `Episode catalogue for anime ID ${anilistId} could not be resolved.`,
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        data: catalogue,
+      });
+    } catch (err) {
+      console.error(`[AnimeController.getEpisodes] Error for ID ${req.params.anilistId}:`, err);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve episode catalogue.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/anime/providers/status
+   * Returns live health and circuit breaker status for all metadata providers and cache.
+   */
+  public static async getProviderStatus(_req: Request, res: Response): Promise<void> {
+    try {
+      const redisHealth = await redisCache.getHealth();
+      res.json({
+        success: true,
+        data: {
+          cache: redisHealth,
+          providers: {
+            anilist: {
+              name: 'AniList GraphQL',
+              endpoint: 'https://graphql.anilist.co',
+              configured: true,
+              circuitBreaker: anilistBreaker.getStatus(),
+            },
+            mal: {
+              name: 'MyAnimeList API v2 (Official)',
+              endpoint: 'https://api.myanimelist.net/v2',
+              configured: Boolean(config.malClientId),
+              circuitBreaker: malBreaker.getStatus(),
+            },
+            tmdb: {
+              name: 'The Movie Database (TMDB)',
+              endpoint: 'https://api.themoviedb.org/3',
+              configured: Boolean(config.tmdbApiKey || config.tmdbReadAccessToken),
+              circuitBreaker: tmdbBreaker.getStatus(),
+            },
+          },
+          circuitBreakers: {
+            anilist: anilistBreaker.getStatus(),
+            mal: malBreaker.getStatus(),
+            tmdb: tmdbBreaker.getStatus(),
+          },
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Failed to retrieve provider status.' });
     }
   }
 

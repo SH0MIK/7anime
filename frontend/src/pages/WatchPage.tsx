@@ -29,11 +29,12 @@ import { WatchPlaylistPanel } from '@/src/components/WatchPlaylistPanel';
 import { WatchAnimeMeta } from '@/src/components/WatchAnimeMeta';
 import { WatchCommentsSection } from '@/src/components/WatchCommentsSection';
 import { WatchSidebarExtras } from '@/src/components/WatchSidebarExtras';
-import { AniListService, generateEpisodesForAniList } from '@/src/services/anilist';
+import { AniListService } from '@/src/services/anilist';
 import { apiClient } from '@/src/services/apiClient';
 import { ArtworkResolver } from '@/src/services/artworkResolver';
 import { ErrorState } from '@/src/components/Skeletons';
 import type { AnimeTitle, EpisodeItem } from '@/src/types/anime';
+import type { AnimeEpisodeCatalogue } from '@7anime/shared';
 
 function extractAniListId(rawParam?: string): number | null {
   if (!rawParam) return null;
@@ -57,6 +58,7 @@ export const WatchPage: React.FC = () => {
   } = useApp();
 
   const [anime, setAnime] = useState<AnimeTitle | null>(null);
+  const [episodesData, setEpisodesData] = useState<AnimeEpisodeCatalogue | null>(null);
   const [liveRelations, setLiveRelations] = useState<AnimeTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +87,19 @@ export const WatchPage: React.FC = () => {
       }
 
       try {
-        const [backendResolved, anilistDetails] = await Promise.allSettled([
+        const [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
           apiClient.getAnimeById(targetId),
           AniListService.getAnimeDetails(targetId),
+          apiClient.getEpisodes(targetId),
         ]);
 
         const backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
         const anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
+        const catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+
+        if (catData && !isCancelled) {
+          setEpisodesData(catData);
+        }
 
         if (!backendData && !anilistData) {
           throw new Error(`Failed to load anime with ID ${targetId}`);
@@ -101,9 +109,16 @@ export const WatchPage: React.FC = () => {
           setLiveRelations(anilistData.related);
         }
 
+        const verifiedEpCount = catData?.totalAnnouncedEpisodes ?? catData?.airedEpisodeCount ?? backendData?.episodes ?? anilistData?.anime?.episodeCount ?? 0;
+        const verifiedSubCount = catData?.airedEpisodeCount ?? verifiedEpCount;
+
         let base: AnimeTitle;
         if (anilistData) {
-          base = anilistData.anime;
+          base = {
+            ...anilistData.anime,
+            episodeCount: verifiedEpCount || anilistData.anime.episodeCount,
+            subCount: verifiedSubCount || anilistData.anime.subCount,
+          };
         } else {
           base = {
             id: targetId,
@@ -120,9 +135,9 @@ export const WatchPage: React.FC = () => {
             type: backendData!.format || 'TV',
             genres: backendData!.genres || [],
             studios: backendData!.studios || [],
-            episodeCount: backendData!.episodes || 12,
-            subCount: backendData!.episodes || 12,
-            dubCount: Math.floor((backendData!.episodes || 12) * 0.85),
+            episodeCount: verifiedEpCount,
+            subCount: verifiedSubCount,
+            dubCount: 0,
             synopsis: backendData!.description || '',
             anilistId: targetId,
           };
@@ -158,10 +173,25 @@ export const WatchPage: React.FC = () => {
     };
   }, [id]);
 
-  const episodes = useMemo(() => {
-    if (!anime) return [];
-    return generateEpisodesForAniList(anime, STILLS_POOL);
-  }, [anime]);
+  const episodes: EpisodeItem[] = useMemo(() => {
+    if (!episodesData?.episodes || episodesData.episodes.length === 0) {
+      return [];
+    }
+    return episodesData.episodes.map((ep) => ({
+      number: ep.number,
+      title: ep.title || `Episode ${ep.number}`,
+      synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+      aired: ep.airDate || `${anime?.year || ''}`,
+      duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+      durationSec: ep.duration ? ep.duration * 60 : 1440,
+      hasSub: true,
+      hasDub: Boolean(ep.hasDub),
+      kind: ep.isFiller ? 'filler' : 'canon',
+      arc: 'Season 1',
+      season: 1,
+      thumbnail: ep.thumbnail || null,
+    }));
+  }, [episodesData, anime]);
 
   const rawEp = epParam ?? searchParams.get('ep') ?? '1';
   const epNum = Math.max(1, Number.parseInt(rawEp, 10) || 1);

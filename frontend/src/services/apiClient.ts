@@ -4,6 +4,8 @@ import type {
   AnimeSearchResult,
   AnimeLogoResult,
   AnimeExternalIds,
+  AnimeEpisodeCatalogue,
+  RecentAiredEpisodeItem,
 } from '@7anime/shared';
 
 export interface BackendHealthResponse {
@@ -217,6 +219,38 @@ class ApiClient {
 
     const json = await res.json();
     return json.data || [];
+  }
+
+  /**
+   * Fetches verified episode catalogue for an anime by AniList ID.
+   */
+  async getEpisodes(anilistId: number | string): Promise<AnimeEpisodeCatalogue | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/anime/${anilistId}/episodes`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.success ? (json.data as AnimeEpisodeCatalogue) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetches real recently aired episodes directly from the backend.
+   */
+  async getRecentAiring(page = 1, limit = 12): Promise<RecentAiredEpisodeItem[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/anime/recent-airing?page=${page}&limit=${limit}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.success && Array.isArray(json.data) ? json.data : [];
+    } catch {
+      return [];
+    }
   }
 }
 

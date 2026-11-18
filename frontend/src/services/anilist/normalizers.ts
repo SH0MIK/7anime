@@ -102,37 +102,32 @@ export function normalizeAniListMedia(media: AniListMedia): AnimeTitle {
 }
 
 /**
- * Builds realistic episode list entries for a given anime using real episode count.
+ * Builds clean minimal episode list entries when only the verified count is known.
+ * Never introduces fake filler flags, fake still images, or fake arc titles.
  */
 export function generateEpisodesForAniList(
   anime: AnimeTitle,
-  stillsPool: string[] = []
+  _stillsPool: string[] = []
 ): EpisodeItem[] {
-  const total = Math.max(1, Math.min(anime.episodeCount || 12, 1000));
+  const total = Math.max(0, Math.min(anime.episodeCount || 0, 1000));
+  if (total === 0) return [];
   const epDuration = typeof anime.duration === 'string' ? anime.duration : '24m';
-  const durationSec = 1440;
 
   return Array.from({ length: total }, (_, i) => {
     const num = i + 1;
-    const kind: EpisodeItem['kind'] =
-      num % 9 === 0 ? 'filler' : num % 5 === 0 ? 'mixed' : 'canon';
-
-    const thumb =
-      stillsPool.length > 0 ? stillsPool[(num - 1) % stillsPool.length] : null;
-
     return {
       number: num,
       title: `Episode ${num}`,
-      synopsis: `Episode ${num} of ${anime.title}. Stream and follow the storyline.`,
-      aired: anime.year ? `${anime.year}` : 'Recent',
+      synopsis: `Episode ${num} of ${anime.title}.`,
+      aired: anime.year ? `${anime.year}` : '',
       duration: epDuration,
-      durationSec,
+      durationSec: 1440,
       hasSub: true,
-      hasDub: num <= anime.dubCount,
-      kind,
-      arc: total > 24 ? `Arc ${Math.ceil(num / 25)}` : 'Main Arc',
+      hasDub: false,
+      kind: 'canon',
+      arc: 'Season 1',
       season: 1,
-      thumbnail: thumb,
+      thumbnail: null,
     };
   });
 }

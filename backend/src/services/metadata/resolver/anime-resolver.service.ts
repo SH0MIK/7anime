@@ -1,10 +1,11 @@
 import { ResolvedAnime, ArtworkResolution, AnimeTrailer } from '@7anime/shared';
 import { AniListProvider, AniListMedia } from '../providers/anilist.provider.js';
+import { MalProvider, MalAnimeDetails } from '../providers/mal.provider.js';
 import { TmdbProvider } from '../providers/tmdb.provider.js';
 import { ExternalIdResolverService, ResolvedExternalIds } from './external-id-resolver.service.js';
 import { LogoResolverService } from './logo-resolver.service.js';
 import { ArtworkResolverService } from './artwork-resolver.service.js';
-import { redisCache } from '../../cache/redis-cache.service.js';
+import { redisCache, SEVEN_DAYS_SECONDS } from '../../cache/redis-cache.service.js';
 
 export class AnimeResolverService {
   /**
@@ -31,26 +32,53 @@ export class AnimeResolverService {
   }
 
   /**
-   * Resolves a complete ResolvedAnime record by AniList ID.
+   * Resolves a complete ResolvedAnime record by AniList ID with multi-provider failover.
+   * Priority:
+   * 1. Shared 7-Day Redis Cache
+   * 2. AniList GraphQL (Primary)
+   * 3. MyAnimeList (Secondary Failover if AniList is unavailable)
+   * 4. Previously verified cached data
    */
   public static async resolveById(anilistId: number): Promise<ResolvedAnime | null> {
     const cacheKey = `resolved:anime:${anilistId}`;
+
+    // 1. Check Shared Global 7-Day Redis Cache
     const cached = await redisCache.get<ResolvedAnime>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    const anilistMedia = await AniListProvider.getAnimeById(anilistId);
-    if (!anilistMedia) {
-      return null;
+    // 2. Try Primary Provider: AniList GraphQL
+    try {
+      const anilistMedia = await AniListProvider.getAnimeById(anilistId);
+      if (anilistMedia) {
+        const resolved = await this.resolveMedia(anilistMedia);
+        if (resolved) {
+          await redisCache.set(cacheKey, resolved, SEVEN_DAYS_SECONDS); // 7-day TTL
+          return resolved;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[AnimeResolverService] AniList provider failed for ${anilistId}: ${err.message}`);
     }
 
-    const resolved = await this.resolveMedia(anilistMedia);
-    if (resolved) {
-      void redisCache.set(cacheKey, resolved, 86400); // 24 hours
+    // 3. Failover to Secondary Provider: MyAnimeList
+    try {
+      const extIds = await ExternalIdResolverService.resolve(anilistId);
+      const malId = extIds?.malId;
+      if (malId) {
+        const malData: MalAnimeDetails | null = await MalProvider.getAnimeById(malId);
+        if (malData) {
+          const resolvedFromMal = await this.resolveFromMal(anilistId, malData, extIds);
+          await redisCache.set(cacheKey, resolvedFromMal, SEVEN_DAYS_SECONDS);
+          return resolvedFromMal;
+        }
+      }
+    } catch (malErr: any) {
+      console.warn(`[AnimeResolverService] MAL failover failed for ${anilistId}: ${malErr.message}`);
     }
 
-    return resolved;
+    return null;
   }
 
   /**
@@ -112,6 +140,8 @@ export class AnimeResolverService {
       status: media.status || 'UNKNOWN',
       season: media.season || undefined,
       seasonYear: media.seasonYear || undefined,
+      startDate: media.startDate,
+      endDate: media.endDate,
       episodes: media.episodes || undefined,
       duration: media.duration || undefined,
       genres: media.genres || [],
@@ -130,6 +160,62 @@ export class AnimeResolverService {
     };
 
     return resolved;
+  }
+
+  /**
+   * Resolves an anime record when failing over to MyAnimeList data.
+   */
+  public static async resolveFromMal(
+    anilistId: number,
+    mal: MalAnimeDetails,
+    extIds?: ResolvedExternalIds | null
+  ): Promise<ResolvedAnime> {
+    const primaryTitle = mal.alternativeTitles?.en || mal.title;
+    const routeId = this.generateRouteId(primaryTitle, anilistId);
+
+    const metadataSources = ['mal'];
+    if (extIds?.tmdbId) metadataSources.push('tmdb');
+
+    let logoUrl: string | undefined = undefined;
+    if (extIds?.tmdbId) {
+      try {
+        const logo = await LogoResolverService.resolveLogo(anilistId);
+        if (logo) logoUrl = logo.logoUrl;
+      } catch {}
+    }
+
+    return {
+      id: String(anilistId),
+      routeId,
+      externalIds: {
+        anilistId,
+        malId: mal.id,
+        tmdbId: extIds?.tmdbId,
+        imdbId: extIds?.imdbId,
+        omdbId: extIds?.omdbId,
+      },
+      titles: {
+        romaji: mal.title,
+        english: mal.alternativeTitles?.en,
+        native: mal.alternativeTitles?.ja,
+        synonyms: mal.alternativeTitles?.synonyms || [],
+      },
+      description: this.cleanDescription(mal.synopsis),
+      format: mal.mediaType?.toUpperCase() || 'TV',
+      status: mal.status ? mal.status.toUpperCase() : 'UNKNOWN',
+      episodes: mal.numEpisodes,
+      genres: (mal.genres || []).map((g) => g.name),
+      studios: (mal.studios || []).map((s) => s.name),
+      ratings: {
+        mal: mal.mean ? Number(mal.mean.toFixed(1)) : undefined,
+      },
+      artwork: {
+        poster: mal.mainPicture?.large || mal.mainPicture?.medium,
+        logo: logoUrl,
+      },
+      metadataSources,
+      popularity: mal.popularity,
+    };
   }
 
   /**

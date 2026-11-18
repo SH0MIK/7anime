@@ -10,15 +10,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@7anime/shared": "*",
+    "@7anime/shared": "file:../shared",
+    "@supabase/supabase-js": "^2.119.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "nodemailer": "^10.6.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^24.19.2",
+    "@types/nodemailer": "^8.0.2",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }

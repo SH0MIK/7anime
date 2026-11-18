@@ -79,6 +79,38 @@ export interface TmdbMovieSearchResult {
   vote_count: number;
 }
 
+export interface TmdbEpisode {
+  id: number;
+  episode_number: number;
+  season_number: number;
+  name: string;
+  overview?: string;
+  air_date?: string;
+  runtime?: number;
+  still_path?: string;
+  vote_average?: number;
+}
+
+export interface TmdbSeasonResponse {
+  id: number;
+  _id: string;
+  air_date?: string;
+  name: string;
+  overview?: string;
+  poster_path?: string;
+  season_number: number;
+  episodes: TmdbEpisode[];
+}
+
+export interface TmdbSeasonSummary {
+  id: number;
+  name: string;
+  season_number: number;
+  episode_count: number;
+  air_date?: string;
+  poster_path?: string;
+}
+
 export interface TmdbTvDetails {
   id: number;
   name: string;
@@ -94,6 +126,7 @@ export interface TmdbTvDetails {
   vote_average: number;
   vote_count: number;
   popularity: number;
+  seasons?: TmdbSeasonSummary[];
 }
 
 export interface TmdbMovieDetails {
@@ -404,6 +437,73 @@ export class TmdbProvider {
       void redisCache.set(cacheKey, results, 86400 * 7);
     }
     return results;
+  }
+
+  /**
+   * Fetches TV season episodes with verified names, air dates, and still images.
+   */
+  public static async getTvSeasonEpisodes(tmdbId: number, seasonNumber: number = 1): Promise<TmdbEpisode[]> {
+    const cacheKey = `tmdb:tv:${tmdbId}:season:${seasonNumber}:episodes`;
+    const cached = await redisCache.get<TmdbEpisode[]>(cacheKey);
+    if (cached) return cached;
+
+    const path = `/3/tv/${tmdbId}/season/${seasonNumber}`;
+    const res = await fetchTmdbResilient<TmdbSeasonResponse>(path);
+    const episodes = res?.episodes || [];
+
+    if (episodes.length > 0) {
+      void redisCache.set(cacheKey, episodes, 86400 * 7); // 7-day cache
+    }
+    return episodes;
+  }
+
+  /**
+   * Fetches all relevant season episodes for a TV anime.
+   * - If expectedEpisodes is specified (e.g. Bleach = 366), and Season 1 has >= expectedEpisodes, returns Season 1.
+   * - If expectedEpisodes is null (ongoing e.g. One Piece) or spans across seasons, fetches all non-special seasons with continuous episode numbering.
+   */
+  public static async getAllTvEpisodes(tmdbId: number, expectedEpisodes?: number | null): Promise<TmdbEpisode[]> {
+    const tv = await this.getTvDetails(tmdbId);
+    if (!tv || !Array.isArray(tv.seasons)) {
+      return this.getTvSeasonEpisodes(tmdbId, 1);
+    }
+
+    const validSeasons = tv.seasons.filter((s) => s.season_number > 0 && s.episode_count > 0);
+    if (validSeasons.length === 0) {
+      return this.getTvSeasonEpisodes(tmdbId, 1);
+    }
+
+    // Single season check: if Season 1 contains all expected episodes (e.g. Bleach 366, Frieren 28)
+    if (expectedEpisodes && expectedEpisodes > 0) {
+      const s1 = validSeasons.find((s) => s.season_number === 1);
+      if (s1 && s1.episode_count >= expectedEpisodes) {
+        return this.getTvSeasonEpisodes(tmdbId, 1);
+      }
+    }
+
+    // Multi-season TV anime (like One Piece with 23 seasons, or multi-cour continuous series)
+    // Fetch all non-special seasons in bounded concurrent batches
+    const allEpisodes: TmdbEpisode[] = [];
+    const batchSize = 6;
+    for (let i = 0; i < validSeasons.length; i += batchSize) {
+      const batch = validSeasons.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map((s) => this.getTvSeasonEpisodes(tmdbId, s.season_number))
+      );
+      for (const seasonEps of batchResults) {
+        allEpisodes.push(...seasonEps);
+      }
+    }
+
+    // Deduplicate by episode_number
+    const epMap = new Map<number, TmdbEpisode>();
+    for (const ep of allEpisodes) {
+      if (ep.episode_number && !epMap.has(ep.episode_number)) {
+        epMap.set(ep.episode_number, ep);
+      }
+    }
+
+    return Array.from(epMap.values()).sort((a, b) => a.episode_number - b.episode_number);
   }
 
   // --- ARTWORK EXTRACTION HELPERS ---
