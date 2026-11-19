@@ -43,6 +43,9 @@ async function runTestSuite() {
   // Ensure no passwords, secret tokens, or access tokens are serialized
   assert(!statusJson.includes(config.smtpPassword || '---'), 'SMTP password is NEVER leaked in serialized status');
   assert(!statusJson.includes(config.googleClientSecret || '---'), 'Google Client Secret is NEVER leaked in serialized status');
+  if (config.googleAuthClientSecret) {
+    assert(!statusJson.includes(config.googleAuthClientSecret), 'Google Auth Client Secret is NEVER leaked in serialized status');
+  }
   assert(!statusJson.includes(config.upstashRedisRestToken || '---'), 'Upstash Redis Token is NEVER leaked in serialized status');
   assert(!statusJson.includes(config.tmdbReadAccessToken || '---'), 'TMDB Read Access Token is NEVER leaked in serialized status');
 
@@ -83,11 +86,15 @@ async function runTestSuite() {
   const smtpCheck = await mailerService.verifyConnection();
   assert(smtpCheck.success === true, 'SMTP transporter.verify() authenticated cleanly with mail server');
 
-  // 6. Google OAuth Configuration
-  console.log('\n--- TEST GROUP 6: Google OAuth & Redirect URI ---');
-  assert(safeStatus.integrations.googleOAuth.configured === true, 'Google OAuth Client ID & Secret detected');
-  assert(safeStatus.integrations.googleOAuth.hasRedirectUri === true, 'Google OAuth Redirect URI is configured');
-  assert(config.googleRedirectUri && config.googleRedirectUri.includes('/api/auth/google/callback'), 'Google Redirect URI is configured for callback route');
+  // 6. Gmail Mailer OAuth & Google Login Credential Separation
+  console.log('\n--- TEST GROUP 6: Gmail Mailer & Google Login Separation ---');
+  assert(safeStatus.integrations.gmailMailer.oauthClientConfigured === true, 'Gmail Mailer OAuth Client ID & Secret detected');
+  assert(safeStatus.integrations.gmailMailer.hasRedirectUri === true, 'Gmail Mailer OAuth Redirect URI is configured');
+  assert(Boolean(config.googleClientId), 'GOOGLE_CLIENT_ID dedicated to Gmail Mailer system');
+  assert(Boolean(config.googleClientSecret), 'GOOGLE_CLIENT_SECRET dedicated to Gmail Mailer system');
+  assert(Boolean(config.googleRedirectUri), 'Gmail Mailer Redirect URI is configured');
+  assert(config.googleAuthClientId !== config.googleClientId, 'Google Login and Gmail Mailer do not share client IDs');
+  assert(config.googleAuthClientId === undefined || typeof config.googleAuthClientId === 'string', 'GOOGLE_AUTH_CLIENT_ID is independently parsed');
 
   // 7. TMDB Configuration & Resilient Client
   console.log('\n--- TEST GROUP 7: TMDB Metadata & Resilient DNS ---');

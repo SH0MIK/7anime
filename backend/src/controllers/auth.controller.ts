@@ -36,9 +36,19 @@ export async function getAuthStatus(req: Request, res: Response) {
         port: config.smtpPort,
         error: smtpHealth.error,
       },
+      googleLogin: {
+        configured: Boolean(config.googleAuthClientId && config.googleAuthClientSecret),
+        redirectUriConfigured: Boolean(config.googleAuthRedirectUri),
+      },
       googleOAuth: {
-        configured: Boolean(config.googleClientId && config.googleClientSecret),
+        configured: Boolean(config.googleAuthClientId && config.googleAuthClientSecret),
+        redirectUriConfigured: Boolean(config.googleAuthRedirectUri),
+      },
+      gmailMailer: {
+        configured: Boolean(config.gmailUser && config.gmailRefreshToken),
+        oauthClientConfigured: Boolean(config.googleClientId && config.googleClientSecret),
         redirectUriConfigured: Boolean(config.googleRedirectUri),
+        note: 'Dedicated Gmail Mailer OAuth client credentials.',
       },
       gmailOAuth: {
         configured: Boolean(config.gmailUser && config.gmailRefreshToken),
@@ -55,7 +65,7 @@ export function getClientAuthConfig(req: Request, res: Response) {
   return res.json({
     success: true,
     data: {
-      googleOAuthEnabled: Boolean(config.googleClientId),
+      googleOAuthEnabled: Boolean(config.googleAuthClientId),
       supabaseUrl: config.supabaseUrl || null,
       supabasePublishableKey: config.supabasePublishableKey || null,
       publicLogoUrl: config.publicLogoUrl,
@@ -68,14 +78,17 @@ export function getClientAuthConfig(req: Request, res: Response) {
  * 1. Explicitly configured GOOGLE_REDIRECT_URI environment variable
  * 2. Inferred from request host & protocol (accounting for reverse proxies)
  */
-export function resolveGoogleRedirectUri(req: Request): string {
-  if (config.googleRedirectUri) {
-    return config.googleRedirectUri;
+export function resolveGoogleAuthRedirectUri(req: Request): string {
+  if (config.googleAuthRedirectUri) {
+    return config.googleAuthRedirectUri;
   }
   const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
   const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
   return `${protocol}://${host}/api/auth/google/callback`;
 }
+
+// Backward-compatible alias for existing imports
+export const resolveGoogleRedirectUri = resolveGoogleAuthRedirectUri;
 
 /**
  * Validates a client redirect URI against allowed origins (CORS origins & localhost in dev)
@@ -104,8 +117,8 @@ export function resolveClientRedirectOrigin(req: Request): string {
 export async function initiateGoogleOAuth(req: Request, res: Response) {
   const clientOrigin = resolveClientRedirectOrigin(req);
 
-  if (!config.googleClientId) {
-    const errMsg = 'Google OAuth is not configured on this server.';
+  if (!config.googleAuthClientId) {
+    const errMsg = 'Google Login is not configured on this server (missing GOOGLE_AUTH_CLIENT_ID).';
     if (req.headers.accept?.includes('application/json')) {
       return res.status(503).json({ success: false, error: errMsg });
     }
@@ -143,7 +156,7 @@ export async function initiateGoogleOAuth(req: Request, res: Response) {
   const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
   const options: Record<string, string> = {
     redirect_uri: redirectUri,
-    client_id: config.googleClientId,
+    client_id: config.googleAuthClientId,
     access_type: 'offline',
     response_type: 'code',
     prompt: 'consent',
@@ -165,10 +178,10 @@ export async function initiateGoogleOAuth(req: Request, res: Response) {
  * registers in distributed Redis store, and sets the state parameter for CSRF and replay protection.
  */
 export async function getGoogleOAuthUrl(req: Request, res: Response) {
-  if (!config.googleClientId) {
+  if (!config.googleAuthClientId) {
     return res.status(503).json({
       success: false,
-      error: 'Google OAuth is not configured on this server.',
+      error: 'Google Login is not configured on this server (missing GOOGLE_AUTH_CLIENT_ID).',
     });
   }
 
@@ -204,7 +217,7 @@ export async function getGoogleOAuthUrl(req: Request, res: Response) {
   const rootUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
   const options: Record<string, string> = {
     redirect_uri: redirectUri,
-    client_id: config.googleClientId,
+    client_id: config.googleAuthClientId,
     access_type: 'offline',
     response_type: 'code',
     prompt: 'consent',
@@ -325,8 +338,8 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
     return res.redirect(`${targetOrigin}/?auth_error=${encodeURIComponent('Authorization code is missing from Google callback.')}`);
   }
 
-  if (!config.googleClientId || !config.googleClientSecret) {
-    const msg = 'Google OAuth credentials not configured on backend.';
+  if (!config.googleAuthClientId || !config.googleAuthClientSecret) {
+    const msg = 'Google Login credentials not configured on backend (missing GOOGLE_AUTH_CLIENT_ID or GOOGLE_AUTH_CLIENT_SECRET).';
     if (req.headers.accept?.includes('application/json')) {
       return res.status(503).json({ success: false, error: msg });
     }
@@ -345,8 +358,8 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
       },
       body: new URLSearchParams({
         code,
-        client_id: config.googleClientId,
-        client_secret: config.googleClientSecret,
+        client_id: config.googleAuthClientId,
+        client_secret: config.googleAuthClientSecret,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
       }).toString(),

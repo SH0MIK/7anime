@@ -48,5 +48,11 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         sync: false
+      - key: GOOGLE_AUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_AUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_AUTH_REDIRECT_URI
+        sync: false
       - key: PUBLIC_LOGO_URL
         sync: false

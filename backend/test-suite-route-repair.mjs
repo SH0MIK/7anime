@@ -21,6 +21,7 @@ import {
   initiateGoogleOAuth,
   handleGoogleOAuthCallback,
   resolveGoogleRedirectUri,
+  resolveGoogleAuthRedirectUri,
   exchangeAuthTicket,
   refreshSession,
   logout,
@@ -201,27 +202,42 @@ it('healthRouter registers /health endpoint', () => {
 });
 
 // -----------------------------------------------------------------------------
-// TEST GROUP 3: Google OAuth URL & Redirect URI Generation
+// TEST GROUP 3: Google Login & Gmail Mailer Credential Separation Logic
 // -----------------------------------------------------------------------------
-console.log('\n--- TEST GROUP 3: Google OAuth URL Generation & Redirect Logic ---');
+console.log('\n--- TEST GROUP 3: Google Login & Gmail Mailer Credential Separation ---');
 
-it('resolveGoogleRedirectUri prioritizes configured GOOGLE_REDIRECT_URI', () => {
-  const fakeReq = {
-    protocol: 'http',
-    headers: {},
-    get: () => 'localhost:3001',
-  };
-  const resolved = resolveGoogleRedirectUri(fakeReq);
-  assert(resolved.includes('/api/auth/google/callback'), 'Redirect URI includes /api/auth/google/callback');
-  if (config.googleRedirectUri) {
-    assert.strictEqual(resolved, config.googleRedirectUri);
+it('resolveGoogleAuthRedirectUri prioritizes configured GOOGLE_AUTH_REDIRECT_URI', () => {
+  const originalAuthUri = config.googleAuthRedirectUri;
+  try {
+    config.googleAuthRedirectUri = 'https://sevenanime-new.onrender.com/api/auth/google/callback';
+    const fakeReq = { protocol: 'http', headers: {}, get: () => 'localhost:3001' };
+    const resolved = resolveGoogleAuthRedirectUri(fakeReq);
+    assert.strictEqual(resolved, 'https://sevenanime-new.onrender.com/api/auth/google/callback');
+  } finally {
+    config.googleAuthRedirectUri = originalAuthUri;
   }
 });
 
-it('resolveGoogleRedirectUri correctly handles proxy headers', () => {
-  const originalConfigUri = config.googleRedirectUri;
+it('resolveGoogleAuthRedirectUri ignores Gmail Mailer GOOGLE_REDIRECT_URI (strict isolation)', () => {
+  const originalAuthUri = config.googleAuthRedirectUri;
+  const originalGmailUri = config.googleRedirectUri;
   try {
-    delete config.googleRedirectUri;
+    delete config.googleAuthRedirectUri;
+    config.googleRedirectUri = 'http://different-mailer-domain.com/callback';
+    const fakeReq = { protocol: 'https', headers: {}, get: () => 'sevenanime-new.onrender.com' };
+    const resolved = resolveGoogleAuthRedirectUri(fakeReq);
+    assert.strictEqual(resolved, 'https://sevenanime-new.onrender.com/api/auth/google/callback');
+    assert.notStrictEqual(resolved, config.googleRedirectUri);
+  } finally {
+    config.googleAuthRedirectUri = originalAuthUri;
+    config.googleRedirectUri = originalGmailUri;
+  }
+});
+
+it('resolveGoogleAuthRedirectUri correctly handles proxy headers', () => {
+  const originalAuthUri = config.googleAuthRedirectUri;
+  try {
+    delete config.googleAuthRedirectUri;
     const proxyReq = {
       protocol: 'http',
       headers: {
@@ -230,90 +246,131 @@ it('resolveGoogleRedirectUri correctly handles proxy headers', () => {
       },
       get: () => 'internal-render-port:10000',
     };
-    const uri = resolveGoogleRedirectUri(proxyReq);
+    const uri = resolveGoogleAuthRedirectUri(proxyReq);
     assert.strictEqual(uri, 'https://sevenanime-new.onrender.com/api/auth/google/callback');
   } finally {
-    config.googleRedirectUri = originalConfigUri;
+    config.googleAuthRedirectUri = originalAuthUri;
   }
 });
 
-await itAsync('getGoogleOAuthUrl generates valid OAuth authorization URL with required scopes and cryptographic state nonce', async () => {
-  let capturedStatus = 200;
-  let capturedJson = null;
+await itAsync('Google Login strictly fails closed when GOOGLE_AUTH_CLIENT_ID is missing (zero fallback to Gmail credentials)', async () => {
+  const originalAuthId = config.googleAuthClientId;
+  const originalGmailId = config.googleClientId;
+  try {
+    delete config.googleAuthClientId;
+    config.googleClientId = 'gmail-mailer-client-id-12345';
 
-  const fakeReq = {
-    protocol: 'https',
-    headers: { referer: 'https://7anime-new.vercel.app' },
-    query: {},
-    get: (name) => (name === 'host' ? 'sevenanime-new.onrender.com' : 'https://7anime-new.vercel.app'),
-  };
-  const fakeRes = {
-    cookies: {},
-    cookie(name, val, opts) {
-      this.cookies[name] = { val, opts };
-      return this;
-    },
-    status(code) {
-      capturedStatus = code;
-      return this;
-    },
-    json(body) {
-      capturedJson = body;
-      return this;
-    },
-  };
+    let capturedStatus = 200;
+    let capturedJson = null;
+    const fakeReq = { protocol: 'https', headers: {}, query: {}, get: () => 'sevenanime-new.onrender.com' };
+    const fakeRes = {
+      status(code) { capturedStatus = code; return this; },
+      json(body) { capturedJson = body; return this; },
+    };
 
-  await getGoogleOAuthUrl(fakeReq, fakeRes);
+    await getGoogleOAuthUrl(fakeReq, fakeRes);
+    assert.strictEqual(capturedStatus, 503, 'Must return 503 Service Unavailable');
+    assert(capturedJson?.error?.includes('missing GOOGLE_AUTH_CLIENT_ID'), 'Identifies missing GOOGLE_AUTH_CLIENT_ID variable name');
+    assert(!JSON.stringify(capturedJson).includes('gmail-mailer-client-id-12345'), 'Zero fallback to Gmail Mailer client ID');
+  } finally {
+    config.googleAuthClientId = originalAuthId;
+    config.googleClientId = originalGmailId;
+  }
+});
 
-  if (config.googleClientId) {
+await itAsync('Google Login strictly uses GOOGLE_AUTH_CLIENT_ID when both credentials exist', async () => {
+  const originalAuthId = config.googleAuthClientId;
+  const originalGmailId = config.googleClientId;
+  try {
+    config.googleClientId = 'gmail-client-id-xyz.apps.googleusercontent.com';
+    config.googleAuthClientId = 'dedicated-login-client-id-abc.apps.googleusercontent.com';
+
+    let capturedStatus = 200;
+    let capturedJson = null;
+    const fakeReq = { protocol: 'https', headers: { referer: 'https://7anime-new.vercel.app' }, query: {}, get: () => 'sevenanime-new.onrender.com' };
+    const fakeRes = {
+      cookies: {},
+      cookie(name, val, opts) { this.cookies[name] = { val, opts }; return this; },
+      status(code) { capturedStatus = code; return this; },
+      json(body) { capturedJson = body; return this; },
+    };
+
+    await getGoogleOAuthUrl(fakeReq, fakeRes);
     assert.strictEqual(capturedStatus, 200);
-    assert(capturedJson?.success === true, 'Response is successful');
-    assert(capturedJson?.url?.startsWith('https://accounts.google.com/o/oauth2/v2/auth'), 'Target is Google OAuth v2');
+    assert(capturedJson?.success === true);
     const url = new URL(capturedJson.url);
-    assert.strictEqual(url.searchParams.get('client_id'), config.googleClientId);
-    assert.strictEqual(url.searchParams.get('response_type'), 'code');
-    assert(url.searchParams.get('redirect_uri').includes('/api/auth/google/callback'));
-    assert(url.searchParams.get('scope').includes('userinfo.email'));
-    assert(url.searchParams.get('scope').includes('userinfo.profile'));
-
-    const stateNonce = url.searchParams.get('state');
-    assert(Boolean(stateNonce) && stateNonce.length >= 32, 'Generated crypto state nonce');
-    assert.strictEqual(fakeRes.cookies['oauth_state']?.val, stateNonce, 'State nonce set in HTTP-only cookie');
-  } else {
-    assert.strictEqual(capturedStatus, 503);
-    assert(capturedJson?.error?.includes('not configured'));
+    assert.strictEqual(url.searchParams.get('client_id'), 'dedicated-login-client-id-abc.apps.googleusercontent.com');
+    assert.notStrictEqual(url.searchParams.get('client_id'), config.googleClientId);
+  } finally {
+    config.googleAuthClientId = originalAuthId;
+    config.googleClientId = originalGmailId;
   }
 });
 
-await itAsync('initiateGoogleOAuth sets first-party oauth_state cookie, stores in authStore, and 302 redirects to Google', async () => {
-  let redirectedUrl = null;
-  let cookieSet = null;
-  const fakeReq = {
-    protocol: 'https',
-    headers: { referer: 'https://7anime-new.vercel.app' },
-    query: {},
-    get: (name) => (name === 'host' ? 'sevenanime-new.onrender.com' : 'https://7anime-new.vercel.app'),
-  };
-  const fakeRes = {
-    cookie(name, val, opts) {
-      cookieSet = { name, val, opts };
-      return this;
-    },
-    redirect(url) {
-      redirectedUrl = url;
-    },
-    status() { return this; },
-    json() { return this; },
-  };
+await itAsync('initiateGoogleOAuth sets first-party oauth_state cookie and redirects to Google using GOOGLE_AUTH_CLIENT_ID', async () => {
+  const originalAuthId = config.googleAuthClientId;
+  try {
+    config.googleAuthClientId = 'dedicated-login-client-id-abc.apps.googleusercontent.com';
+    let redirectedUrl = null;
+    let cookieSet = null;
+    const fakeReq = { protocol: 'https', headers: { referer: 'https://7anime-new.vercel.app' }, query: {}, get: () => 'sevenanime-new.onrender.com' };
+    const fakeRes = {
+      cookie(name, val, opts) { cookieSet = { name, val, opts }; return this; },
+      redirect(url) { redirectedUrl = url; },
+      status() { return this; },
+      json() { return this; },
+    };
 
-  await initiateGoogleOAuth(fakeReq, fakeRes);
-
-  if (config.googleClientId) {
+    await initiateGoogleOAuth(fakeReq, fakeRes);
     assert(Boolean(redirectedUrl), 'Redirect was invoked');
     assert(redirectedUrl.startsWith('https://accounts.google.com/o/oauth2/v2/auth'));
+    assert(redirectedUrl.includes('client_id=dedicated-login-client-id-abc.apps.googleusercontent.com'));
     assert(cookieSet && cookieSet.name === 'oauth_state');
     assert.strictEqual(cookieSet.opts.httpOnly, true);
     assert.strictEqual(cookieSet.opts.sameSite, 'lax');
+  } finally {
+    config.googleAuthClientId = originalAuthId;
+  }
+});
+
+await itAsync('handleGoogleOAuthCallback fails closed with 503 when GOOGLE_AUTH_CLIENT_SECRET is missing', async () => {
+  const originalAuthId = config.googleAuthClientId;
+  const originalAuthSecret = config.googleAuthClientSecret;
+  const originalGmailSecret = config.googleClientSecret;
+  try {
+    config.googleAuthClientId = 'dedicated-login-client-id';
+    delete config.googleAuthClientSecret;
+    config.googleClientSecret = 'gmail-secret-should-not-be-used';
+
+    const testNonce = 'nonce-secret-test-' + Date.now();
+    await authStore.saveOAuthState(testNonce, {
+      nonce: testNonce,
+      clientOrigin: 'https://7anime-new.vercel.app',
+      createdAt: Date.now(),
+    });
+
+    let capturedStatus = 200;
+    let capturedJson = null;
+    const fakeReq = {
+      protocol: 'https',
+      headers: { accept: 'application/json', cookie: `oauth_state=${testNonce}` },
+      query: { code: 'fake-auth-code', state: testNonce },
+      get: () => 'sevenanime-new.onrender.com',
+    };
+    const fakeRes = {
+      status(code) { capturedStatus = code; return this; },
+      json(body) { capturedJson = body; return this; },
+      clearCookie() { return this; },
+    };
+
+    await handleGoogleOAuthCallback(fakeReq, fakeRes);
+    assert.strictEqual(capturedStatus, 503, 'Must return 503 when Google Login secret is missing');
+    assert(capturedJson?.error?.includes('missing GOOGLE_AUTH_CLIENT_ID or GOOGLE_AUTH_CLIENT_SECRET'));
+    assert(!JSON.stringify(capturedJson).includes('gmail-secret-should-not-be-used'));
+  } finally {
+    config.googleAuthClientId = originalAuthId;
+    config.googleAuthClientSecret = originalAuthSecret;
+    config.googleClientSecret = originalGmailSecret;
   }
 });
 

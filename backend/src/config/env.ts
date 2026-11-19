@@ -63,14 +63,17 @@ export interface AppConfig {
   smtpPassword?: string;
   smtpFrom?: string;
 
-  // Google OAuth
+  // Existing Gmail Mailer (Google OAuth & Gmail API)
   googleClientId?: string;
   googleClientSecret?: string;
   googleRedirectUri?: string;
-
-  // Gmail API / Refresh Token (Separate from SMTP)
   gmailUser?: string;
   gmailRefreshToken?: string;
+
+  // Dedicated Google Login OAuth Client (User Authentication)
+  googleAuthClientId?: string;
+  googleAuthClientSecret?: string;
+  googleAuthRedirectUri?: string;
 
   // Public Branding
   publicLogoUrl?: string;
@@ -137,14 +140,17 @@ export const config: AppConfig = {
   smtpPassword: cleanEnvVal(process.env.SMTP_PASSWORD),
   smtpFrom: cleanEnvVal(process.env.SMTP_FROM),
 
-  // Google OAuth
+  // Existing Gmail Mailer (Preserved original variables)
   googleClientId: cleanEnvVal(process.env.GOOGLE_CLIENT_ID),
   googleClientSecret: cleanEnvVal(process.env.GOOGLE_CLIENT_SECRET),
   googleRedirectUri: cleanEnvVal(process.env.GOOGLE_REDIRECT_URI),
-
-  // Gmail OAuth Refresh Token
   gmailUser: cleanEnvVal(process.env.GMAIL_USER),
   gmailRefreshToken: cleanEnvVal(process.env.GMAIL_REFRESH_TOKEN),
+
+  // Dedicated Google Login OAuth Client (Strictly separated, zero fallback to Gmail credentials)
+  googleAuthClientId: cleanEnvVal(process.env.GOOGLE_AUTH_CLIENT_ID),
+  googleAuthClientSecret: cleanEnvVal(process.env.GOOGLE_AUTH_CLIENT_SECRET),
+  googleAuthRedirectUri: cleanEnvVal(process.env.GOOGLE_AUTH_REDIRECT_URI),
 
   // Public Branding
   publicLogoUrl: cleanEnvVal(process.env.PUBLIC_LOGO_URL) || '/logo.png',
@@ -186,6 +192,16 @@ export function validateEnvironment(): { ready: boolean; warnings: string[]; mis
     warnings.push('SMTP credentials missing: transactional emails and OTP dispatch disabled.');
   }
 
+  // Google Login check (Dedicated client)
+  if (!config.googleAuthClientId || !config.googleAuthClientSecret) {
+    warnings.push('Google Login credentials missing (GOOGLE_AUTH_CLIENT_ID / GOOGLE_AUTH_CLIENT_SECRET): Google authentication disabled.');
+  }
+
+  // Gmail Mailer check (Preserved client)
+  if (!config.googleClientId || !config.googleClientSecret) {
+    warnings.push('Gmail Mailer OAuth credentials missing (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET): Gmail API transport disabled.');
+  }
+
   return {
     ready: missingRequired.length === 0,
     warnings,
@@ -218,9 +234,19 @@ export function getSanitizedConfigStatus() {
         port: config.smtpPort,
         fromConfigured: Boolean(config.smtpFrom),
       },
-      googleOAuth: {
-        configured: Boolean(config.googleClientId && config.googleClientSecret),
+      googleLogin: {
+        configured: Boolean(config.googleAuthClientId && config.googleAuthClientSecret),
+        hasRedirectUri: Boolean(config.googleAuthRedirectUri),
+      },
+      gmailMailer: {
+        configured: Boolean(config.gmailUser && config.gmailRefreshToken),
+        oauthClientConfigured: Boolean(config.googleClientId && config.googleClientSecret),
         hasRedirectUri: Boolean(config.googleRedirectUri),
+      },
+      // Backward-compatibility aliases
+      googleOAuth: {
+        configured: Boolean(config.googleAuthClientId && config.googleAuthClientSecret),
+        hasRedirectUri: Boolean(config.googleAuthRedirectUri),
       },
       gmailOAuth: {
         configured: Boolean(config.gmailUser && config.gmailRefreshToken),
