@@ -84,13 +84,43 @@ export interface AppConfig {
   malClientSecret?: string;
 }
 
+/**
+ * Safely parses and normalizes CORS origins.
+ * Ensures the primary production frontend domain is always allowed,
+ * normalizes trailing slashes, and validates protocol.
+ */
+export function parseCorsOrigins(rawEnv?: string): string[] {
+  const allowed = new Set<string>();
+
+  // Always permit the primary production frontend domain
+  allowed.add('https://7anime-new.vercel.app');
+
+  if (rawEnv && rawEnv.trim()) {
+    const rawList = rawEnv.split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+    for (const item of rawList) {
+      try {
+        const parsed = new URL(item);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          allowed.add(parsed.origin);
+        }
+      } catch {
+        // Ignore unparseable entries
+      }
+    }
+  } else {
+    // Default development fallback origins
+    allowed.add('http://localhost:5173');
+    allowed.add('http://localhost:4173');
+    allowed.add('http://localhost:3000');
+  }
+
+  return Array.from(allowed);
+}
+
 export const config: AppConfig = {
   port: parseInt(process.env.PORT || process.env.BACKEND_PORT || '5000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
-  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,http://localhost:3000')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
+  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
 
   // Supabase
   supabaseUrl: cleanEnvVal(process.env.SUPABASE_URL),

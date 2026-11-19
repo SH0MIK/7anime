@@ -2,7 +2,12 @@ import { Router } from 'express';
 import {
   getAuthStatus,
   getClientAuthConfig,
+  initiateGoogleOAuth,
   getGoogleOAuthUrl,
+  handleGoogleOAuthCallback,
+  exchangeAuthTicket,
+  refreshSession,
+  logout,
   getMe,
   updateProfile,
   getWatchlist,
@@ -16,7 +21,12 @@ export const authRouter = Router();
 // Public auth status & client config
 authRouter.get('/status', getAuthStatus);
 authRouter.get('/config', getClientAuthConfig);
+authRouter.get('/google', initiateGoogleOAuth);
 authRouter.get('/google/url', getGoogleOAuthUrl);
+authRouter.get('/google/callback', handleGoogleOAuthCallback);
+authRouter.post('/session/exchange', exchangeAuthTicket);
+authRouter.post('/session/refresh', refreshSession);
+authRouter.post('/logout', logout);
 authRouter.post('/password-reset', sendPasswordReset);
 
 // Protected routes (requires valid Supabase JWT)

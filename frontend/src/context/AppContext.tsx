@@ -37,6 +37,7 @@ import {
   INITIAL_COMMUNITY_THREADS,
   INITIAL_WATCH_ROOMS,
 } from '@/src/data/catalogService';
+import { apiClient, UserProfileResponse } from '@/src/services/apiClient';
 
 const STORAGE_KEYS = {
   locale: '7anime:locale:v1',
@@ -462,7 +463,127 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [showToast]
   );
 
+  // Secure OAuth redirect callback handler and session restoration
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const authTicket = params.get('auth_ticket');
+        const authError = params.get('auth_error');
+
+        // Immediately strip sensitive parameters from URL to prevent token leakage
+        if (authTicket || authError || params.has('auth_success') || params.has('auth_provider')) {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+
+        if (authError) {
+          showToast(decodeURIComponent(authError), 'error');
+          return;
+        }
+
+        if (authTicket) {
+          // Exchange single-use authorization ticket for verified Supabase session
+          const exchangeResult = await apiClient.exchangeAuthTicket(authTicket);
+          if (!exchangeResult.success) {
+            showToast(exchangeResult.error || 'Authentication failed. Please try signing in again.', 'error');
+            return;
+          }
+
+          // Fetch verified user profile directly from backend
+          const meData = await apiClient.getMe();
+          if (isMounted && meData?.user) {
+            const displayName =
+              meData.profile?.displayName ||
+              meData.profile?.username ||
+              (meData.user.email ? meData.user.email.split('@')[0] : 'User');
+            const handleName = (meData.profile?.username || (meData.user.email ? meData.user.email.split('@')[0] : 'user'))
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '');
+
+            const profile: UserProfile = {
+              id: meData.user.id,
+              username: displayName,
+              handle: `@${handleName || 'user'}`,
+              avatar: meData.profile?.avatarUrl || null,
+              accentColor: '#8ac4ff',
+              bannerEffect: 'sakura',
+              frameStyle: 'celestial',
+              bio: meData.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
+              level: 14,
+              xp: 12450,
+              nextLevelXp: 15000,
+              isVip: true,
+              provider: 'google',
+              joinedAt: meData.user.createdAt ? String(new Date(meData.user.createdAt).getFullYear()) : '2026',
+            };
+
+            setUser(profile);
+            setAuthOpen(false);
+            showToast(`Signed in as ${profile.username}`);
+          } else if (isMounted) {
+            showToast('Authentication failed. Please try signing in again.', 'error');
+          }
+          return;
+        }
+
+        // On application mount: check if a valid session exists via restoreSession()
+        const restored = await apiClient.restoreSession();
+        if (isMounted && restored?.user) {
+          const displayName =
+            restored.profile?.displayName ||
+            restored.profile?.username ||
+            (restored.user.email ? restored.user.email.split('@')[0] : 'User');
+          const handleName = (restored.profile?.username || (restored.user.email ? restored.user.email.split('@')[0] : 'user'))
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+
+          setUser((prev) => {
+            if (prev && prev.id === restored.user.id) {
+              return {
+                ...prev,
+                username: displayName,
+                avatar: restored.profile?.avatarUrl ?? prev.avatar,
+                bio: restored.profile?.bio ?? prev.bio,
+              };
+            }
+            return {
+              id: restored.user.id,
+              username: displayName,
+              handle: `@${handleName || 'user'}`,
+              avatar: restored.profile?.avatarUrl || null,
+              accentColor: '#8ac4ff',
+              bannerEffect: 'sakura',
+              frameStyle: 'celestial',
+              bio: restored.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
+              level: 14,
+              xp: 12450,
+              nextLevelXp: 15000,
+              isVip: true,
+              provider: 'google',
+              joinedAt: restored.user.createdAt ? String(new Date(restored.user.createdAt).getFullYear()) : '2026',
+            };
+          });
+        } else if (isMounted && !restored) {
+          // If session is expired or invalid, clear state if user was previously an OAuth user
+          setUser((prev) => (prev?.provider === 'google' ? null : prev));
+        }
+      } catch (err) {
+        console.warn('[AppContext] Auth initialization error:', err);
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showToast]);
+
   const signOut = useCallback(() => {
+    apiClient.logout().catch(() => {});
     setUser(null);
     showToast('Signed out');
   }, [showToast]);

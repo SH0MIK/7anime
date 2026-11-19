@@ -37,6 +37,10 @@ export interface WatchHistoryItem {
 class SupabaseService {
   private client: SupabaseClient | null = null;
   private isConfigured: boolean = false;
+  private isInitialized: boolean = false;
+  private isConnected: boolean = false;
+  private lastPingAt: string | null = null;
+  private initError: string | null = null;
 
   constructor() {
     this.init();
@@ -45,20 +49,40 @@ class SupabaseService {
   private init() {
     if (config.supabaseUrl && config.supabasePublishableKey) {
       try {
-        this.client = createClient(config.supabaseUrl, config.supabasePublishableKey, {
+        // Validate URL format
+        new URL(config.supabaseUrl);
+        this.isConfigured = true;
+
+        const options: Record<string, unknown> = {
           auth: {
             persistSession: false,
             autoRefreshToken: false,
           },
-        });
-        this.isConfigured = true;
+        };
+
+        // If native WebSocket exists in the runtime (Node.js 22+ standard), configure it explicitly
+        if (typeof globalThis.WebSocket !== 'undefined') {
+          options.realtime = {
+            websocket: globalThis.WebSocket,
+          };
+        }
+
+        this.client = createClient(config.supabaseUrl, config.supabasePublishableKey, options);
+        this.isInitialized = true;
+        this.initError = null;
         console.log('[SupabaseService] Client initialized successfully for project:', new URL(config.supabaseUrl).host);
+
+        // Asynchronously probe connectivity at startup without blocking server boot
+        this.testConnection().catch(() => {});
       } catch (err: unknown) {
-        console.error('[SupabaseService] Initialization failed:', err instanceof Error ? err.message : String(err));
         this.client = null;
-        this.isConfigured = false;
+        this.isInitialized = false;
+        this.initError = err instanceof Error ? err.message : String(err);
+        console.error('[SupabaseService] Initialization failed:', this.initError);
       }
     } else {
+      this.isConfigured = false;
+      this.isInitialized = false;
       console.warn('[SupabaseService] Missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY.');
     }
   }
@@ -68,7 +92,59 @@ class SupabaseService {
   }
 
   public isReady(): boolean {
-    return this.isConfigured && this.client !== null;
+    return this.isConfigured && this.isInitialized && this.client !== null;
+  }
+
+  /**
+   * Executes an actual operation against the Supabase backend.
+   * Uses the initialized SDK client to perform an Auth API probe,
+   * verifying network reachability, TLS handshake, gateway routing,
+   * and client-server token exchange.
+   */
+  public async testConnection(): Promise<{ success: boolean; latencyMs: number; error?: string }> {
+    if (!this.client || !config.supabaseUrl) {
+      this.isConnected = false;
+      return { success: false, latencyMs: 0, error: 'Supabase client not initialized' };
+    }
+
+    const start = Date.now();
+    try {
+      // Calling getUser with a probe token verifies the live Supabase network endpoint
+      const { error } = await this.client.auth.getUser('ping_probe_token');
+      const latencyMs = Date.now() - start;
+      const isAlive = !error || error.status === 400 || error.status === 401 || error.status === 403;
+
+      this.isConnected = isAlive;
+      this.lastPingAt = new Date().toISOString();
+      return {
+        success: isAlive,
+        latencyMs,
+        error: isAlive ? undefined : error?.message,
+      };
+    } catch (err: unknown) {
+      this.isConnected = false;
+      const latencyMs = Date.now() - start;
+      return {
+        success: false,
+        latencyMs,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /**
+   * Safe status snapshot separating configuration from actual initialization and connectivity.
+   * Zero secrets or tokens are exposed.
+   */
+  public getStatus() {
+    return {
+      configured: this.isConfigured,
+      initialized: this.isInitialized,
+      connected: this.isConnected,
+      urlHost: config.supabaseUrl ? (() => { try { return new URL(config.supabaseUrl).host; } catch { return null; } })() : null,
+      hasPublishableKey: Boolean(config.supabasePublishableKey),
+      lastPingAt: this.lastPingAt,
+    };
   }
 
   /**

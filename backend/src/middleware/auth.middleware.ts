@@ -6,23 +6,22 @@ export interface AuthenticatedRequest extends Request {
   user?: User;
 }
 
-function extractBearerToken(req: Request): string | null {
-  const authHeader = req.headers.authorization;
+export function extractCookie(req: Request, name: string): string | null {
+  const cookieHeader = req.headers?.cookie;
+  if (!cookieHeader) return null;
+  const cookies = cookieHeader.split(';').map(c => c.trim());
+  const match = cookies.find(c => c.startsWith(`${name}=`));
+  return match ? decodeURIComponent(match.split('=')[1].trim()) : null;
+}
+
+export function extractBearerToken(req: Request): string | null {
+  const authHeader = req.headers?.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7).trim();
   }
 
-  // Also check cookie if provided (e.g., sb-access-token)
-  const cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    const cookies = cookieHeader.split(';').map(c => c.trim());
-    const tokenCookie = cookies.find(c => c.startsWith('sb-access-token=') || c.startsWith('sevenanime_token='));
-    if (tokenCookie) {
-      return tokenCookie.split('=')[1].trim();
-    }
-  }
-
-  return null;
+  // Also check cookie if provided (e.g., sevenanime_token, sb-access-token)
+  return extractCookie(req, 'sevenanime_token') || extractCookie(req, 'sb-access-token');
 }
 
 /**

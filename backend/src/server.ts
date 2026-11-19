@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { config, getSanitizedConfigStatus, loadedEnvPath, validateEnvironment } from './config/env.js';
+import { supabaseService } from './services/supabase/supabase.service.js';
 import { healthRouter } from './routes/health.route.js';
 import { animeRouter } from './routes/anime.route.js';
 import { authRouter } from './routes/auth.route.js';
@@ -9,6 +10,9 @@ const app = express();
 
 // Security: Disable X-Powered-By banner
 app.disable('x-powered-by');
+
+// Enable trust proxy for correct client IP & protocol detection behind Render / Cloudflare
+app.set('trust proxy', 1);
 
 // Security Headers Middleware (OWASP recommended baseline)
 app.use((_req, res, next) => {
@@ -29,11 +33,14 @@ app.use(
       }
 
       // Check configured allowed origins or local development origins
-      if (
+      const isAllowed =
         config.corsOrigins.includes(origin) ||
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:')
-      ) {
+        (config.nodeEnv === 'development' && (
+          origin.startsWith('http://localhost:') ||
+          origin.startsWith('http://127.0.0.1:')
+        ));
+
+      if (isAllowed) {
         return callback(null, true);
       }
 
@@ -85,7 +92,7 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`[7Anime Backend] Server listening on http://${HOST}:${PORT}`);
   console.log(`[7Anime Backend] Environment: ${status.nodeEnv} (loaded: ${loadedEnvPath})`);
   console.log(`[7Anime Backend] Integrations summary:`, {
-    supabase: status.integrations.supabase.configured,
+    supabase: supabaseService.isReady(),
     upstashRedis: status.integrations.upstashRedis.configured,
     smtp: status.integrations.smtp.configured,
     googleOAuth: status.integrations.googleOAuth.configured,

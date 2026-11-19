@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '@/src/context/AppContext';
+import { apiClient } from '@/src/services/apiClient';
 import { Logo } from './common/Logo';
 
 type AuthViewMode = 'login' | 'register' | 'forgot_password' | 'verify_email_notice';
@@ -76,17 +77,11 @@ export const AuthModal: React.FC = () => {
 
     if (providerName === 'Google') {
       try {
-        const res = await fetch('/api/auth/google/url');
-        const data = await res.json();
-        if (data.success && data.url) {
-          window.location.href = data.url;
-          return;
-        } else {
-          setErrorMessage(data.error || 'Google OAuth is not configured on this server.');
-        }
+        const loginUrl = apiClient.getGoogleLoginUrl();
+        window.location.href = loginUrl;
+        return;
       } catch {
         setErrorMessage('Failed to connect to authentication server for Google OAuth.');
-      } finally {
         setLoading(false);
       }
       return;
