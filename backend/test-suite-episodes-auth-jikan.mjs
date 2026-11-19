@@ -17,7 +17,8 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 
-const BACKEND_BASE = 'http://localhost:5000';
+import { config } from './dist/config/env.js';
+const BACKEND_BASE = `http://localhost:${config.port}`;
 
 function fetchJson(url) {
   return new Promise((resolve, reject) => {

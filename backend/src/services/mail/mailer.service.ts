@@ -74,7 +74,7 @@ class MailerService {
     }
 
     const fromAddress = config.smtpFrom || `7Anime Security <${config.smtpUser}>`;
-    const logoUrl = config.publicLogoUrl || 'https://7anime-tv.vercel.app/logo.png';
+    const logoUrl = config.publicLogoUrl || '/logo.png';
     const userLabel = username || to.split('@')[0];
 
     const htmlContent = `<!DOCTYPE html>
@@ -145,7 +145,7 @@ class MailerService {
     }
 
     const fromAddress = config.smtpFrom || `7Anime Security <${config.smtpUser}>`;
-    const logoUrl = config.publicLogoUrl || 'https://7anime-tv.vercel.app/logo.png';
+    const logoUrl = config.publicLogoUrl || '/logo.png';
     const isUrl = resetCodeOrUrl.startsWith('http://') || resetCodeOrUrl.startsWith('https://');
 
     const htmlContent = `<!DOCTYPE html>

@@ -1,41 +1,67 @@
 import express from 'express';
 import cors from 'cors';
-import { config, getSanitizedConfigStatus, loadedEnvPath } from './config/env.js';
+import { config, getSanitizedConfigStatus, loadedEnvPath, validateEnvironment } from './config/env.js';
 import { healthRouter } from './routes/health.route.js';
 import { animeRouter } from './routes/anime.route.js';
 import { authRouter } from './routes/auth.route.js';
 
 const app = express();
 
-// Security and CORS
+// Security: Disable X-Powered-By banner
+app.disable('x-powered-by');
+
+// Security Headers Middleware (OWASP recommended baseline)
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Configurable CORS with local development support
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, or same-origin)
-      if (!origin || config.corsOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, health checks)
+      if (!origin) {
         return callback(null, true);
       }
+
+      // Check configured allowed origins or local development origins
+      if (
+        config.corsOrigins.includes(origin) ||
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      ) {
+        return callback(null, true);
+      }
+
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+
+// Lightweight root health check for Render web service monitors
+app.use('/health', healthRouter);
 
 // API Routes
 app.use('/api', healthRouter);
 app.use('/api/anime', animeRouter);
 app.use('/api/auth', authRouter);
 
-// Root informative endpoint
-app.get('/', (req, res) => {
+// Root informative gateway descriptor
+app.get('/', (_req, res) => {
   res.json({
     name: '7Anime Backend API Gateway',
     version: '1.0.0',
     status: 'online',
     endpoints: {
-      health: '/api/health',
+      health: '/health',
+      apiHealth: '/api/health',
       authStatus: '/api/auth/status',
       authConfig: '/api/auth/config',
       animeSearch: '/api/anime/search?q={query}',
@@ -48,11 +74,15 @@ app.get('/', (req, res) => {
   });
 });
 
-// Start listening if not imported as a test module
+// Explicit binding to 0.0.0.0 on Render dynamic PORT
 const PORT = config.port;
-const server = app.listen(PORT, () => {
+const HOST = '0.0.0.0';
+
+const server = app.listen(PORT, HOST, () => {
   const status = getSanitizedConfigStatus();
-  console.log(`[7Anime Backend] Server listening on http://localhost:${PORT}`);
+  const validation = validateEnvironment();
+
+  console.log(`[7Anime Backend] Server listening on http://${HOST}:${PORT}`);
   console.log(`[7Anime Backend] Environment: ${status.nodeEnv} (loaded: ${loadedEnvPath})`);
   console.log(`[7Anime Backend] Integrations summary:`, {
     supabase: status.integrations.supabase.configured,
@@ -61,7 +91,30 @@ const server = app.listen(PORT, () => {
     googleOAuth: status.integrations.googleOAuth.configured,
     tmdb: status.integrations.tmdb.hasReadAccessToken || status.integrations.tmdb.hasApiKey,
     anilist: status.integrations.anilist.configured,
+    mal: status.integrations.mal.configured,
   });
+
+  if (validation.warnings.length > 0) {
+    validation.warnings.forEach((warn) => console.log(`[7Anime Backend Warning] ${warn}`));
+  }
 });
+
+// Graceful shutdown handling for Render zero-downtime deploys
+const gracefulShutdown = (signal: string) => {
+  console.log(`[7Anime Backend] Received ${signal}. Starting graceful shutdown...`);
+  server.close(() => {
+    console.log('[7Anime Backend] HTTP server closed cleanly. Exiting process.');
+    process.exit(0);
+  });
+
+  // Force close after 10s timeout
+  setTimeout(() => {
+    console.error('[7Anime Backend] Forceful shutdown after 10s timeout.');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export { app, server };

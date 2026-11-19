@@ -114,6 +114,18 @@ export class AnimeResolverService {
       }
     }
 
+    let malRating: number | undefined = undefined;
+    if (extIds.malId && MalProvider.isConfigured()) {
+      try {
+        const malDetails = await MalProvider.getAnimeById(extIds.malId);
+        if (malDetails?.mean) {
+          malRating = Number(malDetails.mean.toFixed(1));
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+
     const metadataSources: string[] = ['anilist'];
     if (extIds.tmdbId) metadataSources.push('tmdb');
     if (extIds.imdbId) metadataSources.push('imdb');
@@ -148,6 +160,7 @@ export class AnimeResolverService {
       studios: (media.studios?.nodes || []).map((s) => s.name),
       ratings: {
         anilist: media.averageScore ? Number((media.averageScore / 10).toFixed(1)) : undefined,
+        mal: malRating,
         tmdb: tmdbRating,
         imdb: undefined,
       },

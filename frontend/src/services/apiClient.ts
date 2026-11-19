@@ -24,19 +24,73 @@ export interface BackendHealthResponse {
       tmdbReadAccessToken: boolean;
       upstashRedis: boolean;
       anilist: boolean;
+      mal?: boolean;
     };
+  };
+}
+
+export interface ClientAuthConfig {
+  googleOAuthEnabled: boolean;
+  supabaseUrl: string | null;
+  supabasePublishableKey: string | null;
+  publicLogoUrl?: string;
+}
+
+export interface UserProfileResponse {
+  user: {
+    id: string;
+    email: string;
+    createdAt?: string;
+  };
+  profile: {
+    id: string;
+    email: string;
+    username?: string;
+    displayName?: string;
+    avatarUrl?: string;
+    bio?: string;
   };
 }
 
 class ApiClient {
   private baseUrl: string;
+  private authToken: string | null = null;
   private animeCache = new Map<string, { data: ResolvedAnime; timestamp: number }>();
   private artworkCache = new Map<string, { data: ArtworkResolution; timestamp: number }>();
   private inFlightRequests = new Map<string, Promise<any>>();
   private readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
-    this.baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const rawEnv = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '';
+    this.baseUrl = rawEnv ? rawEnv.replace(/\/+$/, '') : '/api';
+  }
+
+  /**
+   * Sets or clears the active Supabase JWT session token.
+   */
+  public setAuthToken(token: string | null) {
+    this.authToken = token;
+  }
+
+  /**
+   * Returns current auth token.
+   */
+  public getAuthToken(): string | null {
+    return this.authToken;
+  }
+
+  /**
+   * Merges default headers with Authorization Bearer if available.
+   */
+  private getHeaders(custom: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...custom,
+    };
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
+    return headers;
   }
 
   /**
@@ -44,13 +98,91 @@ class ApiClient {
    */
   async getHealth(): Promise<BackendHealthResponse> {
     const res = await fetch(`${this.baseUrl}/health`, {
-      headers: { Accept: 'application/json' },
+      headers: this.getHeaders(),
     });
 
     if (!res.ok) {
       throw new Error(`API health check failed with status: ${res.status}`);
     }
 
+    return res.json();
+  }
+
+  /**
+   * Fetches client auth config from backend.
+   */
+  async getClientAuthConfig(): Promise<ClientAuthConfig | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/config`, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.success ? (json.data as ClientAuthConfig) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Fetches current authenticated user profile.
+   */
+  async getMe(): Promise<UserProfileResponse | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/me`, {
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.success ? (json.data as UserProfileResponse) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Updates user profile in Supabase PostgreSQL via backend.
+   */
+  async updateProfile(profileData: { username?: string; displayName?: string; avatarUrl?: string; bio?: string }) {
+    const res = await fetch(`${this.baseUrl}/auth/profile`, {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(profileData),
+    });
+    return res.json();
+  }
+
+  /**
+   * Fetches user watchlist.
+   */
+  async getWatchlist() {
+    const res = await fetch(`${this.baseUrl}/auth/watchlist`, {
+      headers: this.getHeaders(),
+    });
+    return res.json();
+  }
+
+  /**
+   * Adds or updates anime in watchlist.
+   */
+  async updateWatchlist(item: { animeId: number; animeTitle: string; posterUrl?: string; format?: string; status: string }) {
+    const res = await fetch(`${this.baseUrl}/auth/watchlist`, {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(item),
+    });
+    return res.json();
+  }
+
+  /**
+   * Requests a password reset email via verified backend SMTP.
+   */
+  async sendPasswordReset(email: string, resetCodeOrUrl?: string) {
+    const res = await fetch(`${this.baseUrl}/auth/password-reset`, {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ email, resetCodeOrUrl }),
+    });
     return res.json();
   }
 
@@ -72,7 +204,7 @@ class ApiClient {
     const requestPromise = (async () => {
       try {
         const res = await fetch(`${this.baseUrl}/anime/${anilistId}`, {
-          headers: { Accept: 'application/json' },
+          headers: this.getHeaders(),
         });
 
         if (!res.ok) {
@@ -114,7 +246,7 @@ class ApiClient {
     const requestPromise = (async () => {
       try {
         const res = await fetch(`${this.baseUrl}/anime/${anilistId}/artwork`, {
-          headers: { Accept: 'application/json' },
+          headers: this.getHeaders(),
         });
 
         if (!res.ok) {
@@ -144,7 +276,7 @@ class ApiClient {
   async searchAnime(query: string, page = 1, limit = 20): Promise<AnimeSearchResult> {
     const res = await fetch(
       `${this.baseUrl}/anime/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
-      { headers: { Accept: 'application/json' } }
+      { headers: this.getHeaders() }
     );
 
     if (!res.ok) {
@@ -161,7 +293,7 @@ class ApiClient {
   async getLogo(anilistId: number | string): Promise<AnimeLogoResult | null> {
     try {
       const res = await fetch(`${this.baseUrl}/anime/${anilistId}/logo`, {
-        headers: { Accept: 'application/json' },
+        headers: this.getHeaders(),
       });
       if (!res.ok) return null;
       const json = await res.json();
@@ -179,7 +311,7 @@ class ApiClient {
     try {
       const idsParam = anilistIds.map(String).join(',');
       const res = await fetch(`${this.baseUrl}/anime/logos?ids=${encodeURIComponent(idsParam)}`, {
-        headers: { Accept: 'application/json' },
+        headers: this.getHeaders(),
       });
       if (!res.ok) return {};
       const json = await res.json();
@@ -195,7 +327,7 @@ class ApiClient {
   async getExternalIds(anilistId: number | string): Promise<AnimeExternalIds | null> {
     try {
       const res = await fetch(`${this.baseUrl}/anime/${anilistId}/external-ids`, {
-        headers: { Accept: 'application/json' },
+        headers: this.getHeaders(),
       });
       if (!res.ok) return null;
       const json = await res.json();
@@ -210,7 +342,7 @@ class ApiClient {
    */
   async getTrending(page = 1, limit = 10): Promise<ResolvedAnime[]> {
     const res = await fetch(`${this.baseUrl}/anime/trending?page=${page}&limit=${limit}`, {
-      headers: { Accept: 'application/json' },
+      headers: this.getHeaders(),
     });
 
     if (!res.ok) {
@@ -227,7 +359,7 @@ class ApiClient {
   async getEpisodes(anilistId: number | string): Promise<AnimeEpisodeCatalogue | null> {
     try {
       const res = await fetch(`${this.baseUrl}/anime/${anilistId}/episodes`, {
-        headers: { Accept: 'application/json' },
+        headers: this.getHeaders(),
       });
       if (!res.ok) return null;
       const json = await res.json();
@@ -243,7 +375,7 @@ class ApiClient {
   async getRecentAiring(page = 1, limit = 12): Promise<RecentAiredEpisodeItem[]> {
     try {
       const res = await fetch(`${this.baseUrl}/anime/recent-airing?page=${page}&limit=${limit}`, {
-        headers: { Accept: 'application/json' },
+        headers: this.getHeaders(),
       });
       if (!res.ok) return [];
       const json = await res.json();

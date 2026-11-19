@@ -117,7 +117,7 @@ export const config: AppConfig = {
   gmailRefreshToken: cleanEnvVal(process.env.GMAIL_REFRESH_TOKEN),
 
   // Public Branding
-  publicLogoUrl: cleanEnvVal(process.env.PUBLIC_LOGO_URL) || 'https://7anime-tv.vercel.app/logo.png',
+  publicLogoUrl: cleanEnvVal(process.env.PUBLIC_LOGO_URL) || '/logo.png',
 
   // TMDB
   tmdbApiKey: cleanEnvVal(process.env.TMDB_API_KEY),
@@ -125,8 +125,43 @@ export const config: AppConfig = {
 
   // MAL
   malClientId: cleanEnvVal(process.env.MAL_CLIENT_ID),
-  malClientSecret: cleanEnvVal(process.env.MAL_CLIENT_SECRET),
+  malClientSecret: cleanEnvVal(process.env.MAL_CLIENT_SECRET) || cleanEnvVal(process.env.Client_Secret),
 };
+
+/**
+ * Validates environment readiness without throwing fatal errors for optional integrations.
+ * Distinguishes core vs optional capabilities.
+ */
+export function validateEnvironment(): { ready: boolean; warnings: string[]; missingRequired: string[] } {
+  const warnings: string[] = [];
+  const missingRequired: string[] = [];
+
+  // Core metadata check
+  if (!config.tmdbApiKey && !config.tmdbReadAccessToken) {
+    warnings.push('TMDB credentials missing: artwork and backdrop resolution will use AniList fallbacks.');
+  }
+
+  // Upstash check
+  if (!config.upstashRedisRestUrl || !config.upstashRedisRestToken) {
+    warnings.push('Upstash Redis credentials missing: operating with local in-memory LRU cache.');
+  }
+
+  // Supabase check
+  if (!config.supabaseUrl || !config.supabasePublishableKey) {
+    warnings.push('Supabase credentials missing: user profiles and watchlists will use memory sessions.');
+  }
+
+  // SMTP check
+  if (!config.smtpUser || !config.smtpPassword) {
+    warnings.push('SMTP credentials missing: transactional emails and OTP dispatch disabled.');
+  }
+
+  return {
+    ready: missingRequired.length === 0,
+    warnings,
+    missingRequired,
+  };
+}
 
 /**
  * Returns safe environment diagnostic status without revealing any secret values.

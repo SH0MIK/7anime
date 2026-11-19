@@ -73,7 +73,40 @@ const MAL_FIELDS = [
   'studios',
 ].join(',');
 
+const ONE_HOUR_SECONDS = 3600;
+
 export class MalProvider {
+  /**
+   * Returns whether the official MyAnimeList API is configured.
+   */
+  public static isConfigured(): boolean {
+    return Boolean(config.malClientId && config.malClientId.length > 5);
+  }
+
+  /**
+   * Tests live authenticated connectivity to official MyAnimeList API v2.
+   */
+  public static async testConnectivity(): Promise<{ success: boolean; error?: string; latencyMs?: number }> {
+    if (!this.isConfigured()) {
+      return { success: false, error: 'MAL_CLIENT_ID is not configured in environment.' };
+    }
+
+    const start = Date.now();
+    try {
+      const res = await HttpClient.get<any>(`${MAL_API_BASE}/anime/21?fields=id,title`, {
+        headers: { 'X-MAL-CLIENT-ID': config.malClientId! },
+        timeoutMs: 6000,
+      });
+
+      if (res && res.id === 21) {
+        return { success: true, latencyMs: Date.now() - start };
+      }
+      return { success: false, error: 'Unexpected response from MyAnimeList API v2' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+
   /**
    * Fetches anime details by MAL ID from the official MyAnimeList API v2.
    * Uses only the configured MAL Client ID. No third-party scraper fallback.
@@ -84,36 +117,49 @@ export class MalProvider {
     }
 
     const cacheKey = `mal:anime:${malId}`;
-    const cached = await redisCache.get<MalAnimeDetails>(cacheKey);
-    if (cached) {
+    const cached = await redisCache.get<MalAnimeDetails | null>(cacheKey);
+    if (cached !== null && cached !== undefined) {
       return cached;
     }
 
-    if (!config.malClientId) {
-      console.warn('[MalProvider] Official MAL API client ID not configured. MAL requests unavailable.');
+    if (!this.isConfigured()) {
       return null;
     }
 
     return malBreaker.execute(
       async () => {
-        const url = `${MAL_API_BASE}/anime/${malId}?fields=${MAL_FIELDS}`;
-        const res = await HttpClient.get<any>(url, {
-          headers: {
-            'X-MAL-CLIENT-ID': config.malClientId!,
-          },
-          timeoutMs: 8000,
-        });
+        try {
+          const url = `${MAL_API_BASE}/anime/${malId}?fields=${MAL_FIELDS}`;
+          const res = await HttpClient.get<any>(url, {
+            headers: {
+              'X-MAL-CLIENT-ID': config.malClientId!,
+            },
+            timeoutMs: 8000,
+          });
 
-        if (res && res.id) {
-          const details = this.normalizeMalResponse(res);
-          await redisCache.set(cacheKey, details, SEVEN_DAYS_SECONDS);
-          return details;
+          if (res && res.id) {
+            const details = this.normalizeMalResponse(res);
+            await redisCache.set(cacheKey, details, SEVEN_DAYS_SECONDS);
+            return details;
+          }
+
+          return null;
+        } catch (err: any) {
+          const msg = err?.message || '';
+          if (msg.includes('404')) {
+            // Negative cache non-existent MAL anime
+            await redisCache.set(cacheKey, null, ONE_HOUR_SECONDS);
+            return null;
+          }
+          if (msg.includes('429')) {
+            console.warn(`[MalProvider] Rate limited by MyAnimeList API v2 (HTTP 429) for malId ${malId}.`);
+            return null;
+          }
+          throw err;
         }
-
-        return null;
       },
       async (breakerError) => {
-        console.warn(`[MalProvider] Circuit breaker triggered: ${breakerError?.message}`);
+        console.warn(`[MalProvider] Circuit breaker handled error for ${malId}: ${breakerError?.message}`);
         return null;
       }
     );
@@ -130,26 +176,34 @@ export class MalProvider {
     const cached = await redisCache.get<MalAnimeDetails[]>(cacheKey);
     if (cached) return cached;
 
-    if (!config.malClientId) {
-      console.warn('[MalProvider] Official MAL API client ID not configured. MAL search unavailable.');
+    if (!this.isConfigured()) {
       return [];
     }
 
     return malBreaker.execute(
       async () => {
-        const url = `${MAL_API_BASE}/anime?q=${encodeURIComponent(trimmed)}&limit=${limit}&fields=${MAL_FIELDS}`;
-        const res = await HttpClient.get<any>(url, {
-          headers: { 'X-MAL-CLIENT-ID': config.malClientId! },
-          timeoutMs: 8000,
-        });
+        try {
+          const url = `${MAL_API_BASE}/anime?q=${encodeURIComponent(trimmed)}&limit=${limit}&fields=${MAL_FIELDS}`;
+          const res = await HttpClient.get<any>(url, {
+            headers: { 'X-MAL-CLIENT-ID': config.malClientId! },
+            timeoutMs: 8000,
+          });
 
-        if (Array.isArray(res?.data)) {
-          const items = res.data.map((entry: any) => this.normalizeMalResponse(entry.node));
-          await redisCache.set(cacheKey, items, 86400 * 3); // 3 days
-          return items;
+          if (Array.isArray(res?.data)) {
+            const items = res.data.map((entry: any) => this.normalizeMalResponse(entry.node));
+            await redisCache.set(cacheKey, items, 86400 * 3); // 3 days
+            return items;
+          }
+
+          return [];
+        } catch (err: any) {
+          const msg = err?.message || '';
+          if (msg.includes('429')) {
+            console.warn(`[MalProvider] Rate limited by MyAnimeList API v2 during search.`);
+            return [];
+          }
+          throw err;
         }
-
-        return [];
       },
       async () => []
     );
