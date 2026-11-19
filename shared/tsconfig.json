@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "declaration": true,
     "emitDeclarationOnly": true,
+    "rootDir": "./types",
     "outDir": "./dist",
     "strict": true,
     "skipLibCheck": true
