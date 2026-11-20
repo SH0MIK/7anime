@@ -41,6 +41,12 @@ export interface UserProfileResponse {
     id: string;
     email: string;
     createdAt?: string;
+    app_metadata?: {
+      provider?: string;
+      providers?: string[];
+      [key: string]: any;
+    };
+    user_metadata?: Record<string, any>;
   };
   profile: {
     id: string;

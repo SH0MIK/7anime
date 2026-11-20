@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/src/context/AppContext';
 import { apiClient } from '@/src/services/apiClient';
+import { signInWithDiscord } from '@/src/services/supabase';
 import { Logo } from './common/Logo';
 
 type AuthViewMode = 'login' | 'register' | 'forgot_password' | 'verify_email_notice';
@@ -70,7 +71,7 @@ export const AuthModal: React.FC = () => {
   if (!authOpen) return null;
 
   // Handles OAuth button click with honest configuration state
-  const handleOAuthClick = async (providerName: 'Google' | 'Apple') => {
+  const handleOAuthClick = async (providerName: 'Google' | 'Discord') => {
     setErrorMessage(null);
     setInfoMessage(null);
     setLoading(true);
@@ -87,12 +88,24 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
-    setTimeout(() => {
-      setLoading(false);
-      setErrorMessage(
-        `${providerName} OAuth sign-in is not configured on this server (Missing ${providerName.toUpperCase()}_CLIENT_ID). Please sign in using your Email & Password.`
-      );
-    }, 450);
+    if (providerName === 'Discord') {
+      try {
+        const { error } = await signInWithDiscord();
+        if (error) {
+          setErrorMessage(error.message || 'Discord OAuth sign-in is not configured on this server. Please sign in using your Email & Password.');
+          setLoading(false);
+        }
+        return;
+      } catch (err: unknown) {
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : 'Discord OAuth sign-in is not configured on this server. Please sign in using your Email & Password.'
+        );
+        setLoading(false);
+      }
+      return;
+    }
   };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -292,7 +305,7 @@ export const AuthModal: React.FC = () => {
         {/* ============================================================== */}
         {mode === 'login' && (
           <div>
-            {/* Required Options 1 & 2: Continue with Google / Apple */}
+            {/* Required Options 1 & 2: Continue with Google / Discord */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
               <button
                 type="button"
@@ -328,7 +341,7 @@ export const AuthModal: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => handleOAuthClick('Apple')}
+                onClick={() => handleOAuthClick('Discord')}
                 disabled={loading}
                 style={{
                   display: 'flex',
@@ -347,10 +360,10 @@ export const AuthModal: React.FC = () => {
                 }}
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M16.37 1.43c0 1.14-.42 2.24-1.26 3.06-.92.92-2.06 1.42-3.28 1.32-.12-1.1.4-2.28 1.22-3.06.84-.82 2.1-1.36 3.32-1.32ZM20.5 17.17c-.53 1.18-.78 1.71-1.46 2.76-.95 1.44-2.29 3.24-3.95 3.26-1.47.02-1.85-.96-3.85-.95-2 .01-2.42.97-3.89.95-1.66-.02-2.93-1.64-3.88-3.08-2.66-4.05-2.94-8.8-1.3-11.33 1.17-1.8 3.02-2.85 4.76-2.85 1.77 0 2.88.97 4.35.97 1.42 0 2.28-.97 4.33-.97 1.54 0 3.17.84 4.33 2.29-3.8 2.08-3.18 7.52.56 8.95Z" />
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="#5865F2" aria-hidden="true">
+                    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
                   </svg>
-                  <span>Continue with Apple</span>
+                  <span>Continue with Discord</span>
                 </span>
                 <ArrowRight size={14} style={{ opacity: 0.5 }} />
               </button>

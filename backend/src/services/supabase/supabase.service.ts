@@ -211,12 +211,25 @@ class SupabaseService {
    * to Auth user metadata if the custom profiles table has not yet been migrated.
    */
   public async getUserProfile(user: User): Promise<UserProfile> {
+    const derivedUsername =
+      (user.user_metadata?.username as string) ||
+      (user.user_metadata?.full_name as string) ||
+      (user.user_metadata?.name as string) ||
+      (user.user_metadata?.custom_claims?.global_name as string) ||
+      (user.email ? user.email.split('@')[0] : 'User');
+
+    const derivedDisplayName =
+      (user.user_metadata?.displayName as string) ||
+      (user.user_metadata?.full_name as string) ||
+      (user.user_metadata?.name as string) ||
+      derivedUsername;
+
     const fallbackProfile: UserProfile = {
       id: user.id,
       email: user.email || '',
-      username: (user.user_metadata?.username as string) || (user.email ? user.email.split('@')[0] : 'User'),
-      displayName: (user.user_metadata?.displayName as string) || (user.user_metadata?.full_name as string) || null as any,
-      avatarUrl: (user.user_metadata?.avatar_url as string) || (user.user_metadata?.picture as string) || null as any,
+      username: derivedUsername,
+      displayName: derivedDisplayName as any,
+      avatarUrl: (user.user_metadata?.avatar_url as string) || (user.user_metadata?.picture as string) || (null as any),
       createdAt: user.created_at,
     };
 
@@ -230,6 +243,16 @@ class SupabaseService {
         .maybeSingle();
 
       if (error || !data) {
+        if (!data && !error) {
+          // Lazily persist fallback profile into profiles table to prevent duplicates
+          this.upsertUserProfile({
+            id: user.id,
+            email: fallbackProfile.email,
+            username: fallbackProfile.username,
+            displayName: fallbackProfile.displayName,
+            avatarUrl: fallbackProfile.avatarUrl,
+          }).catch(() => {});
+        }
         return fallbackProfile;
       }
 

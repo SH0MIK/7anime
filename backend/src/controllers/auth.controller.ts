@@ -623,6 +623,8 @@ export async function getMe(req: AuthenticatedRequest, res: Response) {
         id: req.user.id,
         email: req.user.email,
         createdAt: req.user.created_at,
+        app_metadata: req.user.app_metadata,
+        user_metadata: req.user.user_metadata,
       },
       profile,
     },

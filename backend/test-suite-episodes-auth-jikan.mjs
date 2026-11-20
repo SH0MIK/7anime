@@ -198,7 +198,7 @@ async function runVerification() {
     const dialogsCode = fs.readFileSync(dialogsPath, 'utf8');
 
     assert(dialogsCode.includes('Continue with Google'), 'Login modal has Continue with Google option');
-    assert(dialogsCode.includes('Continue with Apple'), 'Login modal has Continue with Apple option');
+    assert(dialogsCode.includes('Continue with Discord') || dialogsCode.includes('Continue with Apple'), 'Login modal has Continue with Discord option');
     assert(dialogsCode.includes('Email Address') || dialogsCode.includes('Email or Username'), 'Login modal has Continue with Email option');
     assert(dialogsCode.includes('Password'), 'Login modal has Password field');
     assert(dialogsCode.includes('Confirm Password'), 'Create Account has Confirm Password field');

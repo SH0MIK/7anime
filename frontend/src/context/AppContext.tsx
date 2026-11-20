@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { supabase, signOutSupabase } from '@/src/services/supabase';
 import {
   DEFAULT_LOCALE,
   detectBrowserLocale,
@@ -463,18 +464,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [showToast]
   );
 
+  // Refs to track active user ID and ongoing sync to prevent duplicate session initialization
+  const currentUserIdRef = useRef<string | null>(null);
+  const isSyncingRef = useRef<boolean>(false);
+
   // Secure OAuth redirect callback handler and session restoration
   useEffect(() => {
     let isMounted = true;
+
+    // Helper: Synchronizes an authenticated Supabase session with the user profile
+    const syncUserProfile = async (
+      session: any,
+      fallbackProvider: AuthProvider = 'discord'
+    ): Promise<boolean> => {
+      if (isSyncingRef.current) return false;
+      if (currentUserIdRef.current === session.user?.id && user) return true;
+
+      isSyncingRef.current = true;
+      try {
+        apiClient.saveSession(session);
+        const meData = await apiClient.getMe();
+        if (isMounted && meData?.user) {
+          const displayName =
+            meData.profile?.displayName ||
+            meData.profile?.username ||
+            (meData.user.user_metadata?.full_name as string) ||
+            (meData.user.user_metadata?.name as string) ||
+            (meData.user.email ? meData.user.email.split('@')[0] : 'User');
+
+          const rawHandle =
+            meData.profile?.username ||
+            (meData.user.user_metadata?.username as string) ||
+            (meData.user.email ? meData.user.email.split('@')[0] : 'user');
+          const handleName = rawHandle.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          const resolvedProvider =
+            (meData.user.app_metadata?.provider as AuthProvider) || fallbackProvider;
+
+          const profile: UserProfile = {
+            id: meData.user.id,
+            username: displayName,
+            handle: `@${handleName || 'user'}`,
+            avatar:
+              meData.profile?.avatarUrl ||
+              (meData.user.user_metadata?.avatar_url as string) ||
+              (meData.user.user_metadata?.picture as string) ||
+              null,
+            accentColor: '#8ac4ff',
+            bannerEffect: 'sakura',
+            frameStyle: 'celestial',
+            bio: meData.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
+            level: 14,
+            xp: 12450,
+            nextLevelXp: 15000,
+            isVip: true,
+            provider: resolvedProvider,
+            joinedAt: meData.user.createdAt
+              ? String(new Date(meData.user.createdAt).getFullYear())
+              : '2026',
+          };
+
+          currentUserIdRef.current = profile.id;
+          setUser(profile);
+          setAuthOpen(false);
+          showToast(`Signed in as ${profile.username}`);
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.warn('[AppContext] Profile synchronization error:', err);
+        return false;
+      } finally {
+        isSyncingRef.current = false;
+      }
+    };
 
     const initializeAuth = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
         const authTicket = params.get('auth_ticket');
-        const authError = params.get('auth_error');
+        const authError =
+          params.get('auth_error') || params.get('error_description') || params.get('error');
 
-        // Immediately strip sensitive parameters from URL to prevent token leakage
-        if (authTicket || authError || params.has('auth_success') || params.has('auth_provider')) {
+        // Clean sensitive parameters from URL history
+        if (
+          authTicket ||
+          authError ||
+          params.has('code') ||
+          params.has('auth_success') ||
+          params.has('auth_provider')
+        ) {
           const cleanUrl = window.location.pathname;
           window.history.replaceState({}, document.title, cleanUrl);
         }
@@ -484,62 +563,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
+        // 1. Google OAuth single-use ticket exchange flow
         if (authTicket) {
-          // Exchange single-use authorization ticket for verified Supabase session
           const exchangeResult = await apiClient.exchangeAuthTicket(authTicket);
-          if (!exchangeResult.success) {
+          if (!exchangeResult.success || !exchangeResult.session) {
             showToast(exchangeResult.error || 'Authentication failed. Please try signing in again.', 'error');
             return;
           }
-
-          // Fetch verified user profile directly from backend
-          const meData = await apiClient.getMe();
-          if (isMounted && meData?.user) {
-            const displayName =
-              meData.profile?.displayName ||
-              meData.profile?.username ||
-              (meData.user.email ? meData.user.email.split('@')[0] : 'User');
-            const handleName = (meData.profile?.username || (meData.user.email ? meData.user.email.split('@')[0] : 'user'))
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, '');
-
-            const profile: UserProfile = {
-              id: meData.user.id,
-              username: displayName,
-              handle: `@${handleName || 'user'}`,
-              avatar: meData.profile?.avatarUrl || null,
-              accentColor: '#8ac4ff',
-              bannerEffect: 'sakura',
-              frameStyle: 'celestial',
-              bio: meData.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
-              level: 14,
-              xp: 12450,
-              nextLevelXp: 15000,
-              isVip: true,
-              provider: 'google',
-              joinedAt: meData.user.createdAt ? String(new Date(meData.user.createdAt).getFullYear()) : '2026',
-            };
-
-            setUser(profile);
-            setAuthOpen(false);
-            showToast(`Signed in as ${profile.username}`);
-          } else if (isMounted) {
-            showToast('Authentication failed. Please try signing in again.', 'error');
-          }
+          await syncUserProfile(exchangeResult.session, 'google');
           return;
         }
 
-        // On application mount: check if a valid session exists via restoreSession()
+        // 2. Discord / Supabase PKCE OAuth callback flow
+        if (params.has('code')) {
+          const { data: supaSessionData, error: supaErr } = await supabase.auth.getSession();
+          if (supaErr) {
+            showToast(supaErr.message || 'Discord authentication failed. Please try signing in again.', 'error');
+            return;
+          }
+          if (supaSessionData?.session) {
+            await syncUserProfile(supaSessionData.session, 'discord');
+            return;
+          }
+        }
+
+        // 3. Application mount: restore active session via apiClient.restoreSession()
         const restored = await apiClient.restoreSession();
         if (isMounted && restored?.user) {
           const displayName =
             restored.profile?.displayName ||
             restored.profile?.username ||
+            (restored.user.user_metadata?.full_name as string) ||
+            (restored.user.user_metadata?.name as string) ||
             (restored.user.email ? restored.user.email.split('@')[0] : 'User');
-          const handleName = (restored.profile?.username || (restored.user.email ? restored.user.email.split('@')[0] : 'user'))
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '');
 
+          const rawHandle =
+            restored.profile?.username ||
+            (restored.user.user_metadata?.username as string) ||
+            (restored.user.email ? restored.user.email.split('@')[0] : 'user');
+          const handleName = rawHandle.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+          const provider =
+            (restored.user.app_metadata?.provider as AuthProvider) || 'google';
+
+          currentUserIdRef.current = restored.user.id;
           setUser((prev) => {
             if (prev && prev.id === restored.user.id) {
               return {
@@ -562,13 +629,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               xp: 12450,
               nextLevelXp: 15000,
               isVip: true,
-              provider: 'google',
-              joinedAt: restored.user.createdAt ? String(new Date(restored.user.createdAt).getFullYear()) : '2026',
+              provider,
+              joinedAt: restored.user.createdAt
+                ? String(new Date(restored.user.createdAt).getFullYear())
+                : '2026',
             };
           });
-        } else if (isMounted && !restored) {
-          // If session is expired or invalid, clear state if user was previously an OAuth user
-          setUser((prev) => (prev?.provider === 'google' ? null : prev));
+        } else if (isMounted) {
+          // If apiClient had no stored session, also check Supabase client storage directly
+          const { data: supaSessionData } = await supabase.auth.getSession();
+          if (supaSessionData?.session) {
+            await syncUserProfile(
+              supaSessionData.session,
+              (supaSessionData.session.user.app_metadata?.provider as AuthProvider) || 'discord'
+            );
+          } else {
+            currentUserIdRef.current = null;
+            setUser((prev) =>
+              prev?.provider === 'google' || prev?.provider === 'discord' ? null : prev
+            );
+          }
         }
       } catch (err) {
         console.warn('[AppContext] Auth initialization error:', err);
@@ -577,13 +657,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     initializeAuth();
 
+    // 4. Supabase auth state change listener (captures async PKCE token exchange and token refreshes)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
+        apiClient.saveSession(session);
+        if (currentUserIdRef.current !== session.user.id) {
+          await syncUserProfile(
+            session,
+            (session.user.app_metadata?.provider as AuthProvider) || 'discord'
+          );
+        }
+      } else if (event === 'SIGNED_OUT') {
+        apiClient.clearSession();
+        currentUserIdRef.current = null;
+        setUser((prev) => (prev?.provider === 'discord' ? null : prev));
+      }
+    });
+
     return () => {
       isMounted = false;
+      subscription.unsubscribe();
     };
   }, [showToast]);
 
   const signOut = useCallback(() => {
+    signOutSupabase().catch(() => {});
     apiClient.logout().catch(() => {});
+    currentUserIdRef.current = null;
     setUser(null);
     showToast('Signed out');
   }, [showToast]);
