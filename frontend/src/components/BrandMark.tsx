@@ -18,12 +18,16 @@ export const BrandFooterLockup: React.FC = () => {
   );
 };
 
+import type { AvatarDecorationId } from '../types/cosmetics';
+import { AvatarDecorationRenderer } from './profile/AvatarDecorationRenderer';
+
 interface AvatarBadgeProps {
   username: string;
   avatar?: string | null;
   color?: string;
   size?: number;
-  frameStyle?: 'none' | 'crown' | 'celestial' | 'crimson' | 'neon';
+  frameStyle?: 'none' | 'crown' | 'celestial' | 'crimson' | 'neon' | string;
+  decoration?: AvatarDecorationId | string;
 }
 
 export const AvatarBadge: React.FC<AvatarBadgeProps> = ({
@@ -32,36 +36,51 @@ export const AvatarBadge: React.FC<AvatarBadgeProps> = ({
   color = '#43465a',
   size = 28,
   frameStyle = 'none',
+  decoration,
 }) => {
+  const activeDecoration = decoration || (frameStyle && frameStyle !== 'none' ? frameStyle : 'none');
   const initial = (username?.trim()?.[0] ?? 'A').toUpperCase();
-  const frameClass =
-    frameStyle && frameStyle !== 'none' ? `avatar-frame-ring avatar-frame-ring--${frameStyle}` : '';
 
   return (
     <span
-      className={frameClass}
+      className="avatar-badge-container"
       style={{
+        position: 'relative',
         width: size,
         height: size,
-        borderRadius: '50%',
-        overflow: 'hidden',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         flexShrink: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: avatar ? '#191a20' : color,
-        color: '#ffffff',
-        fontSize: Math.max(10, Math.round(size * 0.42)),
-        fontWeight: 700,
+        overflow: 'visible',
       }}
     >
-      {avatar ? (
-        <img
-          src={avatar}
-          alt={username}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      ) : (
-        initial
+      <span
+        style={{
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          overflow: 'hidden',
+          display: 'grid',
+          placeItems: 'center',
+          background: avatar ? '#191a20' : color,
+          color: '#ffffff',
+          fontSize: Math.max(10, Math.round(size * 0.42)),
+          fontWeight: 700,
+        }}
+      >
+        {avatar ? (
+          <img
+            src={avatar}
+            alt={username}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          initial
+        )}
+      </span>
+      {activeDecoration && activeDecoration !== 'none' && (
+        <AvatarDecorationRenderer decoration={activeDecoration} size={size} />
       )}
     </span>
   );

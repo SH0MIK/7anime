@@ -1,12 +1,15 @@
 /* ==========================================================================
-   Avatar Decorations & Banner Particle Effects
+   7Anime — Avatar Decorations & Profile Banner Effects
    ========================================================================== */
+
+/* --- Banner Effect Canvas Container --- */
 .bfx {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
   contain: strict;
+  z-index: 1;
 }
 
 .bfx i {
@@ -15,6 +18,7 @@
   will-change: transform, opacity;
 }
 
+/* 1. SAKURA (Drifting Pink Cherry Petals) */
 .bfx--sakura i {
   top: -16px;
   left: var(--x);
@@ -43,6 +47,8 @@
   }
 }
 
+/* 2. SNOWFALL / SNOW */
+.bfx--snowfall i,
 .bfx--snow i {
   top: -10px;
   left: var(--x);
@@ -63,14 +69,16 @@
     opacity: 0.95;
   }
   50% {
-    transform: translate3d(var(--dx), 120px, 0);
+    transform: translate3d(var(--dx), 130px, 0);
   }
   100% {
-    transform: translate3d(0, 250px, 0);
+    transform: translate3d(0, 260px, 0);
     opacity: 0.2;
   }
 }
 
+/* 3. NIGHT SKY / STARS */
+.bfx--night_sky i,
 .bfx--stars i {
   left: var(--x);
   top: var(--y);
@@ -83,17 +91,72 @@
 }
 
 @keyframes bfx-twinkle {
-  0%,
-  100% {
+  0%, 100% {
     opacity: 0.15;
     transform: scale(0.6);
   }
   50% {
     opacity: 1;
-    transform: scale(1.15);
+    transform: scale(1.2);
   }
 }
 
+/* 4. FIREFLIES */
+.bfx--fireflies i {
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: radial-gradient(circle, #fef08a 0%, #facc15 45%, #ca8a04 80%, transparent 100%);
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.85);
+  animation: bfx-firefly var(--d) ease-in-out var(--delay) infinite alternate;
+}
+
+@keyframes bfx-firefly {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.7);
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(var(--dx), -24px, 0) scale(1.2);
+  }
+  100% {
+    transform: translate3d(calc(var(--dx) * -0.5), 20px, 0) scale(0.6);
+    opacity: 0.2;
+  }
+}
+
+/* 5. AURORA */
+.bfx--aurora {
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.15) 0%,
+    rgba(56, 189, 248, 0.2) 35%,
+    rgba(168, 85, 247, 0.2) 70%,
+    transparent 100%
+  );
+  filter: blur(14px);
+  animation: bfx-aurora-shift 9s ease-in-out infinite alternate;
+}
+
+@keyframes bfx-aurora-shift {
+  0% {
+    transform: scale(1) translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.05) translateY(-8px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.98) translateY(6px);
+    opacity: 0.6;
+  }
+}
+
+/* 6. EMBERS */
 .bfx--embers i {
   bottom: -8px;
   left: var(--x);
@@ -119,25 +182,271 @@
   }
 }
 
-.avatar-frame-ring {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
+/* 7. HEARTS */
+.bfx--hearts i {
+  bottom: -16px;
+  left: var(--x);
+  width: var(--s);
+  height: var(--s);
+  opacity: 0;
+  background-color: #f43f5e;
+  transform: rotate(45deg);
+  animation: bfx-heart var(--d) ease-in var(--delay) infinite;
+}
+
+.bfx--hearts i::before,
+.bfx--hearts i::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-color: inherit;
   border-radius: 50%;
 }
-
-.avatar-frame-ring--crown {
-  box-shadow: 0 0 0 2.5px #fbbf24, 0 0 18px rgba(251, 191, 36, 0.45);
+.bfx--hearts i::before {
+  top: -50%;
+  left: 0;
+}
+.bfx--hearts i::after {
+  top: 0;
+  left: -50%;
 }
 
-.avatar-frame-ring--celestial {
-  box-shadow: 0 0 0 2.5px #93c5fd, 0 0 18px rgba(147, 197, 253, 0.45);
+@keyframes bfx-heart {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(45deg) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(var(--dx), -250px, 0) rotate(45deg) scale(1.1);
+    opacity: 0;
+  }
 }
 
-.avatar-frame-ring--crimson {
-  box-shadow: 0 0 0 2.5px #fb7185, 0 0 18px rgba(251, 113, 133, 0.45);
+/* 8. CONFETTI */
+.bfx--confetti i {
+  top: -12px;
+  left: var(--x);
+  width: var(--s);
+  height: calc(var(--s) * 0.7);
+  background: var(--color, #f43f5e);
+  opacity: 0;
+  animation: bfx-confetti var(--d) linear var(--delay) infinite;
 }
 
-.avatar-frame-ring--neon {
-  box-shadow: 0 0 0 2.5px #c084fc, 0 0 18px rgba(192, 132, 252, 0.45);
+@keyframes bfx-confetti {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(var(--dx), 260px, 0) rotateX(720deg) rotateY(360deg);
+    opacity: 0;
+  }
+}
+
+/* 9. NEON RAIN */
+.bfx--neon_rain i {
+  top: -40px;
+  left: var(--x);
+  width: 2px;
+  height: calc(var(--s) * 3);
+  background: linear-gradient(180deg, transparent, #00f5ff 60%, #ec4899);
+  opacity: 0;
+  animation: bfx-neon-rain var(--d) linear var(--delay) infinite;
+}
+
+@keyframes bfx-neon-rain {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(-15px, 280px, 0);
+    opacity: 0;
+  }
+}
+
+/* 10. AUTUMN LEAVES */
+.bfx--autumn_leaves i {
+  top: -16px;
+  left: var(--x);
+  width: var(--s);
+  height: calc(var(--s) * 0.8);
+  border-radius: 80% 0;
+  background: linear-gradient(135deg, #f97316, #dc2626 70%, #9a3412);
+  opacity: 0;
+  animation: bfx-autumn var(--d) linear var(--delay) infinite;
+}
+
+@keyframes bfx-autumn {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(var(--dx), 260px, 0) rotate(640deg);
+    opacity: 0;
+  }
+}
+
+/* 11. BUBBLES */
+.bfx--bubbles i {
+  bottom: -18px;
+  left: var(--x);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.8), rgba(125, 211, 252, 0.3) 60%, rgba(244, 114, 182, 0.2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  opacity: 0;
+  animation: bfx-bubble var(--d) ease-in var(--delay) infinite;
+}
+
+@keyframes bfx-bubble {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.8);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(var(--dx), -250px, 0) scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* 12. FIREWORKS */
+.bfx--fireworks i {
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--color, #fbbf24);
+  box-shadow: 0 0 12px var(--color, #fbbf24);
+  opacity: 0;
+  animation: bfx-firework var(--d) ease-out var(--delay) infinite;
+}
+
+@keyframes bfx-firework {
+  0% {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+/* 13. THUNDERSTORM */
+.bfx--thunderstorm i {
+  top: -30px;
+  left: var(--x);
+  width: 1.5px;
+  height: calc(var(--s) * 2.5);
+  background: rgba(147, 197, 253, 0.7);
+  opacity: 0;
+  animation: bfx-rain var(--d) linear var(--delay) infinite;
+}
+
+@keyframes bfx-rain {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(-20px, 260px, 0);
+    opacity: 0;
+  }
+}
+
+.bfx--thunderstorm::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(224, 242, 254, 0.25);
+  opacity: 0;
+  animation: bfx-lightning 7s ease-out infinite;
+}
+
+@keyframes bfx-lightning {
+  0%, 88%, 94%, 100% {
+    opacity: 0;
+  }
+  90%, 92% {
+    opacity: 1;
+  }
+}
+
+/* 14. CODE RAIN */
+.bfx--code_rain i {
+  top: -30px;
+  left: var(--x);
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #22c55e;
+  text-shadow: 0 0 6px #4ade80;
+  opacity: 0;
+  animation: bfx-matrix var(--d) linear var(--delay) infinite;
+}
+
+@keyframes bfx-matrix {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  90% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(260px);
+    opacity: 0;
+  }
+}
+
+/* --- Accessibility: Respect reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .bfx i,
+  .bfx--aurora,
+  .bfx--thunderstorm::after {
+    animation: none !important;
+    opacity: 0.35 !important;
+  }
 }

@@ -8,6 +8,13 @@ export interface UserProfile {
   displayName?: string;
   avatarUrl?: string;
   bio?: string;
+  avatarDecoration?: string;
+  bannerEffect?: string;
+  bannerUrl?: string;
+  frameStyle?: string;
+  level?: number;
+  xp?: number;
+  isVip?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -230,6 +237,10 @@ class SupabaseService {
       username: derivedUsername,
       displayName: derivedDisplayName as any,
       avatarUrl: (user.user_metadata?.avatar_url as string) || (user.user_metadata?.picture as string) || (null as any),
+      avatarDecoration: (user.user_metadata?.avatar_decoration as string) || (user.user_metadata?.avatarDecoration as string) || 'none',
+      bannerEffect: (user.user_metadata?.banner_effect as string) || (user.user_metadata?.bannerEffect as string) || 'none',
+      bannerUrl: (user.user_metadata?.banner_url as string) || (user.user_metadata?.bannerUrl as string) || undefined,
+      frameStyle: (user.user_metadata?.frame_style as string) || (user.user_metadata?.frameStyle as string) || 'default',
       createdAt: user.created_at,
     };
 
@@ -251,6 +262,10 @@ class SupabaseService {
             username: fallbackProfile.username,
             displayName: fallbackProfile.displayName,
             avatarUrl: fallbackProfile.avatarUrl,
+            avatarDecoration: fallbackProfile.avatarDecoration,
+            bannerEffect: fallbackProfile.bannerEffect,
+            bannerUrl: fallbackProfile.bannerUrl,
+            frameStyle: fallbackProfile.frameStyle,
           }).catch(() => {});
         }
         return fallbackProfile;
@@ -263,6 +278,10 @@ class SupabaseService {
         displayName: data.display_name || fallbackProfile.displayName,
         avatarUrl: data.avatar_url || fallbackProfile.avatarUrl,
         bio: data.bio || '',
+        avatarDecoration: data.avatar_decoration || fallbackProfile.avatarDecoration,
+        bannerEffect: data.banner_effect || fallbackProfile.bannerEffect,
+        bannerUrl: data.banner_url || fallbackProfile.bannerUrl,
+        frameStyle: data.frame_style || fallbackProfile.frameStyle,
         createdAt: data.created_at || user.created_at,
         updatedAt: data.updated_at,
       };
@@ -279,18 +298,49 @@ class SupabaseService {
       return { success: false, error: 'Supabase client not initialized' };
     }
 
+    const payload: Record<string, unknown> = {
+      id: profile.id,
+      updated_at: new Date().toISOString(),
+    };
+    if (profile.email !== undefined) payload.email = profile.email;
+    if (profile.username !== undefined) payload.username = profile.username;
+    if (profile.displayName !== undefined) payload.display_name = profile.displayName;
+    if (profile.avatarUrl !== undefined) payload.avatar_url = profile.avatarUrl;
+    if (profile.bio !== undefined) payload.bio = profile.bio;
+    if (profile.avatarDecoration !== undefined) payload.avatar_decoration = profile.avatarDecoration;
+    if (profile.bannerEffect !== undefined) payload.banner_effect = profile.bannerEffect;
+    if (profile.bannerUrl !== undefined) payload.banner_url = profile.bannerUrl;
+    if (profile.frameStyle !== undefined) payload.frame_style = profile.frameStyle;
+
     try {
-      const { error } = await this.client.from('profiles').upsert({
-        id: profile.id,
-        email: profile.email,
-        username: profile.username,
-        display_name: profile.displayName,
-        avatar_url: profile.avatarUrl,
-        bio: profile.bio,
-        updated_at: new Date().toISOString(),
-      });
+      const { error } = await this.client.from('profiles').upsert(payload);
 
       if (error) {
+        // If the table schema has not yet had custom cosmetics columns migrated,
+        // retry gracefully without the cosmetics fields so core profile updates never fail.
+        if (
+          error.message &&
+          (error.message.includes('avatar_decoration') ||
+            error.message.includes('banner_effect') ||
+            error.message.includes('banner_url') ||
+            error.message.includes('frame_style') ||
+            error.code === '42703')
+        ) {
+          const corePayload = {
+            id: profile.id,
+            email: profile.email,
+            username: profile.username,
+            display_name: profile.displayName,
+            avatar_url: profile.avatarUrl,
+            bio: profile.bio,
+            updated_at: payload.updated_at,
+          };
+          const retryRes = await this.client.from('profiles').upsert(corePayload);
+          if (retryRes.error) {
+            return { success: false, error: retryRes.error.message };
+          }
+          return { success: true };
+        }
         return { success: false, error: error.message };
       }
       return { success: true };

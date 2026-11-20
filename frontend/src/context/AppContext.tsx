@@ -447,13 +447,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handle: `@${displayName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
         avatar: null,
         accentColor: '#8ac4ff',
-        bannerEffect: 'sakura',
-        frameStyle: 'celestial',
+        avatarDecoration: 'none',
+        bannerEffect: 'none',
+        bannerUrl: null,
+        frameStyle: 'none',
         bio: 'Watching subbed & dubbed anime in HD on 7Anime.',
-        level: 14,
-        xp: 12450,
-        nextLevelXp: 15000,
-        isVip: true,
+        level: 0,
+        xp: 0,
+        nextLevelXp: 75,
+        isVip: false,
         provider,
         joinedAt: '2026',
       };
@@ -501,6 +503,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const resolvedProvider =
             (meData.user.app_metadata?.provider as AuthProvider) || fallbackProvider;
 
+          let cachedStyle: {
+            avatarDecoration?: string;
+            bannerEffect?: string;
+            bannerUrl?: string;
+            banner?: string;
+            usernameGlow?: string | null;
+            visibility?: any;
+          } = {};
+          try {
+            const rawStyle = localStorage.getItem(`7anime:custom_style:${meData.user.id}`);
+            if (rawStyle) cachedStyle = JSON.parse(rawStyle);
+          } catch {}
+
+          const avatarDecoration =
+            meData.profile?.avatarDecoration ||
+            cachedStyle.avatarDecoration ||
+            (meData.user.user_metadata?.avatar_decoration as any) ||
+            (meData.user.user_metadata?.avatarDecoration as any) ||
+            'none';
+
+          const bannerEffect =
+            meData.profile?.bannerEffect ||
+            cachedStyle.bannerEffect ||
+            (meData.user.user_metadata?.banner_effect as any) ||
+            (meData.user.user_metadata?.bannerEffect as any) ||
+            'none';
+
+          const bannerUrl =
+            meData.profile?.bannerUrl ||
+            cachedStyle.bannerUrl ||
+            (meData.user.user_metadata?.banner_url as any) ||
+            (meData.user.user_metadata?.bannerUrl as any) ||
+            null;
+
           const profile: UserProfile = {
             id: meData.user.id,
             username: displayName,
@@ -511,13 +547,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               (meData.user.user_metadata?.picture as string) ||
               null,
             accentColor: '#8ac4ff',
-            bannerEffect: 'sakura',
-            frameStyle: 'celestial',
+            avatarDecoration: avatarDecoration as any,
+            bannerEffect: bannerEffect as any,
+            bannerUrl: bannerUrl || undefined,
+            banner: bannerUrl || undefined,
+            usernameGlow: (meData.profile as any)?.username_glow || (meData.profile as any)?.usernameGlow || cachedStyle.usernameGlow || null,
+            visibility: (meData.profile as any)?.visibility || cachedStyle.visibility || undefined,
+            frameStyle: (meData.profile?.frameStyle as any) || 'none',
             bio: meData.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
-            level: 14,
-            xp: 12450,
-            nextLevelXp: 15000,
-            isVip: true,
+            level:
+              typeof (meData.user.user_metadata as any)?.level === 'number'
+                ? (meData.user.user_metadata as any).level
+                : typeof (meData.profile as any)?.level === 'number'
+                  ? (meData.profile as any).level
+                  : 0,
+            xp:
+              typeof (meData.user.user_metadata as any)?.xp === 'number'
+                ? (meData.user.user_metadata as any).xp
+                : typeof (meData.profile as any)?.xp === 'number'
+                  ? (meData.profile as any).xp
+                  : 0,
+            nextLevelXp: 75,
+            isVip: Boolean(
+              meData.user.user_metadata?.isVip ||
+              meData.user.user_metadata?.vip ||
+              meData.user.app_metadata?.isVip ||
+              meData.user.app_metadata?.claims_admin
+            ),
             provider: resolvedProvider,
             joinedAt: meData.user.createdAt
               ? String(new Date(meData.user.createdAt).getFullYear())
@@ -621,14 +677,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               username: displayName,
               handle: `@${handleName || 'user'}`,
               avatar: restored.profile?.avatarUrl || null,
+              bannerUrl: restored.profile?.bannerUrl || undefined,
+              banner: restored.profile?.bannerUrl || undefined,
               accentColor: '#8ac4ff',
-              bannerEffect: 'sakura',
-              frameStyle: 'celestial',
+              bannerEffect: (restored.profile?.bannerEffect as any) || 'sakura',
+              frameStyle: (restored.profile?.frameStyle as any) || 'none',
               bio: restored.profile?.bio || 'Watching subbed & dubbed anime in HD on 7Anime.',
-              level: 14,
-              xp: 12450,
-              nextLevelXp: 15000,
-              isVip: true,
+              level: 0,
+              xp: 0,
+              nextLevelXp: 75,
+              isVip: false,
               provider,
               joinedAt: restored.user.createdAt
                 ? String(new Date(restored.user.createdAt).getFullYear())
@@ -693,7 +751,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [showToast]);
 
   const updateUserProfile = useCallback((patch: Partial<UserProfile>) => {
-    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+    setUser((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...patch };
+      if (
+        patch.avatarDecoration !== undefined ||
+        patch.bannerEffect !== undefined ||
+        patch.bannerUrl !== undefined ||
+        patch.banner !== undefined ||
+        patch.usernameGlow !== undefined ||
+        patch.visibility !== undefined ||
+        patch.accentColor !== undefined
+      ) {
+        try {
+          const styleCacheKey = `7anime:custom_style:${prev.id}`;
+          localStorage.setItem(
+            styleCacheKey,
+            JSON.stringify({
+              avatarDecoration: updated.avatarDecoration,
+              bannerEffect: updated.bannerEffect,
+              bannerUrl: updated.bannerUrl || updated.banner,
+              banner: updated.banner || updated.bannerUrl,
+              usernameGlow: updated.usernameGlow,
+              visibility: updated.visibility,
+              accentColor: updated.accentColor,
+            })
+          );
+        } catch {}
+      }
+      return updated;
+    });
+
+    if (apiClient.isAuthenticated()) {
+      apiClient
+        .updateProfile({
+          username: patch.username,
+          displayName: patch.username,
+          avatarUrl: patch.avatar || undefined,
+          bio: patch.bio,
+          avatarDecoration: patch.avatarDecoration,
+          bannerEffect: patch.bannerEffect,
+          bannerUrl: (patch.bannerUrl || patch.banner) ? String(patch.bannerUrl || patch.banner) : undefined,
+          banner: (patch.banner || patch.bannerUrl) ? String(patch.banner || patch.bannerUrl) : undefined,
+          usernameGlow: patch.usernameGlow,
+          visibility: patch.visibility,
+          frameStyle: patch.frameStyle,
+        })
+        .catch((err) => {
+          console.warn('[AppContext] Failed to sync profile update to backend:', err);
+        });
+    }
   }, []);
 
   const setAnimeStatus = useCallback(

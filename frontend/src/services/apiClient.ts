@@ -54,6 +54,13 @@ export interface UserProfileResponse {
     username?: string;
     displayName?: string;
     avatarUrl?: string;
+    bannerUrl?: string;
+    banner?: string;
+    avatarDecoration?: string;
+    bannerEffect?: string;
+    frameStyle?: string;
+    usernameGlow?: string | null;
+    visibility?: any;
     bio?: string;
   };
 }
@@ -100,7 +107,7 @@ class ApiClient {
       this.authToken = session.access_token;
       try {
         sessionStorage.setItem(this.SESSION_STORAGE_KEY, JSON.stringify(session));
-      } catch {}
+      } catch { }
     }
   }
 
@@ -123,7 +130,7 @@ class ApiClient {
     this.authToken = null;
     try {
       sessionStorage.removeItem(this.SESSION_STORAGE_KEY);
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -141,6 +148,13 @@ class ApiClient {
    */
   public getAuthToken(): string | null {
     return this.authToken;
+  }
+
+  /**
+   * Returns true if client has an active authenticated session token.
+   */
+  public isAuthenticated(): boolean {
+    return Boolean(this.authToken);
   }
 
   /**
@@ -179,7 +193,7 @@ class ApiClient {
           if (fallbackRes.ok) {
             return fallbackRes.json();
           }
-        } catch {}
+        } catch { }
       }
       throw new Error(`API health check failed with status: ${res.status}`);
     }
@@ -323,7 +337,7 @@ class ApiClient {
         headers: this.getHeaders(),
         credentials: 'include',
       });
-    } catch {} finally {
+    } catch { } finally {
       this.clearSession();
     }
     return { success: true };
@@ -398,7 +412,19 @@ class ApiClient {
   /**
    * Updates user profile in Supabase PostgreSQL via backend.
    */
-  async updateProfile(profileData: { username?: string; displayName?: string; avatarUrl?: string; bio?: string }) {
+  async updateProfile(profileData: {
+    username?: string;
+    displayName?: string;
+    avatarUrl?: string;
+    bannerUrl?: string;
+    banner?: string;
+    avatarDecoration?: string;
+    bannerEffect?: string;
+    frameStyle?: string;
+    usernameGlow?: string | null;
+    visibility?: any;
+    bio?: string;
+  }) {
     const res = await fetch(`${this.baseUrl}/auth/profile`, {
       method: 'POST',
       headers: this.getHeaders({ 'Content-Type': 'application/json' }),

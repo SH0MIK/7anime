@@ -1,18 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   Captions,
   Check,
+  Clapperboard,
   Database,
+  Lock,
   Palette,
+  Play,
   PlayCircle,
   Search,
   Shield,
   Sliders,
+  Sun,
   User,
 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { AccountSection, ACCOUNT_SUBS, type AccountSub } from '@/src/components/AccountSection';
 import { useApp } from '@/src/context/AppContext';
 import { ACCENT_SWATCHES, THEME_OPTIONS } from '@/src/utils/themeUtils';
+import { ProfileStyleModal } from '@/src/components/profile/ProfileStyleModal';
 
 type SettingsSection =
   | 'account'
@@ -49,19 +56,39 @@ export const SettingsPage: React.FC = () => {
     exportStorageJson,
     resetDeviceData,
     showToast,
+    updateUserProfile,
   } = useApp();
 
   const [section, setSection] = useState<SettingsSection>('account');
   const [filterQuery, setFilterQuery] = useState('');
+  const [accountSub, setAccountSub] = useState<AccountSub>('overview');
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
+  const { hash } = useLocation();
+  const spyLockUntil = useRef(0);
+  // Scroll-spy updates, ignored briefly after a sidebar click so short end sections stay selected.
+  const handleSpy = useCallback((id: AccountSub) => {
+    if (Date.now() >= spyLockUntil.current) setAccountSub(id);
+  }, []);
+
+  // Deep links such as /settings#pf-password or /settings#settings-player
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.slice(1);
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (id.startsWith('settings-')) setSection(id.replace('settings-', '') as SettingsSection);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [hash]);
 
   const sections: { id: SettingsSection; label: string; icon: React.ReactNode; keywords: string }[] = [
     { id: 'account', label: t('settings.account'), icon: <User size={16} />, keywords: 'account sign in profile sync guest' },
-    { id: 'appearance', label: t('settings.appearance'), icon: <Palette size={16} />, keywords: 'theme accent dark light language english animations blur text size' },
-    { id: 'content', label: t('settings.content'), icon: <Sliders size={16} />, keywords: 'title language sort mature thumbs continue watching' },
-    { id: 'player', label: t('settings.player'), icon: <PlayCircle size={16} />, keywords: 'audio sub dub server autoplay auto skip speed' },
+    { id: 'appearance', label: t('settings.appearance'), icon: <Sun size={16} />, keywords: 'theme accent dark light language english animations blur text size' },
+    { id: 'content', label: t('settings.content'), icon: <Clapperboard size={16} />, keywords: 'title language sort mature thumbs continue watching' },
+    { id: 'player', label: t('settings.player'), icon: <Play size={16} />, keywords: 'audio sub dub server autoplay auto skip speed' },
     { id: 'captions', label: t('settings.captions'), icon: <Captions size={16} />, keywords: 'subtitle font color background opacity edge' },
     { id: 'notifications', label: t('settings.notifications'), icon: <Bell size={16} />, keywords: 'alerts push episodes privacy' },
-    { id: 'data', label: t('settings.yourData'), icon: <Database size={16} />, keywords: 'export history reset device storage' },
+    { id: 'data', label: t('settings.yourData'), icon: <Lock size={16} />, keywords: 'export history reset device storage' },
   ];
 
   const visibleSections = useMemo(() => {
@@ -92,8 +119,15 @@ export const SettingsPage: React.FC = () => {
     showToast('Data exported');
   };
 
+  const jumpSub = (id: AccountSub) => {
+    spyLockUntil.current = Date.now() + 1200;
+    setAccountSub(id);
+    setSection('account');
+    document.getElementById(`pf-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div className="page-shell">
+    <div className="page-shell pf-page">
       <div className="page-header">
         <div className="page-header__left">
           <h1 className="page-title">{t('settings.title')}</h1>
@@ -101,28 +135,44 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       <div className="settings-layout">
-        <aside className="settings-nav" aria-label="Settings sections">
-          <div className="browse-search-pill" style={{ width: '100%', marginBottom: 8 }}>
-            <Search size={14} style={{ opacity: 0.6 }} />
+        <aside className="pf-nav" aria-label="Settings sections">
+          <label className="pf-nav__search">
+            <Search size={15} aria-hidden="true" />
             <input
               type="text"
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
               placeholder="Search settings"
+              aria-label="Search settings"
             />
-          </div>
+          </label>
 
-          <div className="settings-nav__list">
+          <div className="pf-nav__list">
             {visibleSections.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={`settings-nav__item ${section === s.id ? 'is-active' : ''}`}
-                onClick={() => scrollToSection(s.id)}
-              >
-                {s.icon}
-                <span>{s.label}</span>
-              </button>
+              <React.Fragment key={s.id}>
+                <button
+                  type="button"
+                  className={`pf-nav__item ${section === s.id ? 'is-active' : ''}`}
+                  onClick={() => scrollToSection(s.id)}
+                >
+                  {s.icon}
+                  <span>{s.label}</span>
+                </button>
+                {s.id === 'account' && user && (
+                  <div className="pf-nav__subs">
+                    {ACCOUNT_SUBS.map((sub) => (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        className={`pf-nav__sub ${section === 'account' && accountSub === sub.id ? 'is-active' : ''}`}
+                        onClick={() => jumpSub(sub.id)}
+                      >
+                        {sub.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </React.Fragment>
             ))}
           </div>
         </aside>
@@ -130,24 +180,26 @@ export const SettingsPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
           {showSection('account') && (
             <section id="settings-account" style={{ scrollMarginTop: 84 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-                <User size={18} />
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('settings.account')}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <User size={18} />
+                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 750 }}>{t('settings.account')}</h2>
+                </div>
+                {user && (
+                  <button
+                    type="button"
+                    className="watch-pill"
+                    onClick={() => setIsStyleModalOpen(true)}
+                    style={{ height: 32, padding: '0 14px', fontSize: 12.5, fontWeight: 650 }}
+                  >
+                    Change profile style
+                  </button>
+                )}
               </div>
-              <div className="settings-card">
-                {user ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 16 }}>{user.username}</div>
-                      <div style={{ fontSize: 13, color: 'rgb(var(--c-text2))' }}>
-                        {user.handle} · Connected via {user.provider} · Level {user.level}
-                      </div>
-                    </div>
-                    <button type="button" className="watch-pill" onClick={signOut}>
-                      Sign out
-                    </button>
-                  </div>
-                ) : (
+              {user ? (
+                <AccountSection onActive={handleSpy} />
+              ) : (
+                <div className="settings-card">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                     <p style={{ margin: 0, fontSize: 13.5, color: 'rgb(var(--c-text2))' }}>
                       Browsing as a guest. Your list stays on this device.
@@ -170,8 +222,8 @@ export const SettingsPage: React.FC = () => {
                       {t('nav.signIn')}
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -676,6 +728,16 @@ export const SettingsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {user && (
+        <ProfileStyleModal
+          isOpen={isStyleModalOpen}
+          onClose={() => setIsStyleModalOpen(false)}
+          currentDecoration={user.avatarDecoration}
+          currentBannerEffect={user.bannerEffect}
+          onSave={(dec, bfx) => updateUserProfile({ avatarDecoration: dec, bannerEffect: bfx })}
+        />
+      )}
     </div>
   );
 };

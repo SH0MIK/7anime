@@ -1,3 +1,5 @@
+import type { AvatarDecorationId, BannerEffectId } from './cosmetics';
+
 export type WatchStatus =
   | 'watching'
   | 'plan'
@@ -38,14 +40,25 @@ export interface WatchHistoryEntry {
   updatedAt: number;
 }
 
+export interface ProfileVisibility {
+  publicProfile: boolean;
+  showComments: boolean;
+  showLibrary: boolean;
+  showSocial: boolean;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
   handle: string;
   avatar: string | null;
+  /** Optional uploaded profile banner (data URL or URL). */
+  banner?: string | null;
+  bannerUrl?: string | null;
   accentColor: string;
-  bannerEffect: 'none' | 'sakura' | 'snow' | 'stars' | 'aurora' | 'embers';
-  frameStyle: 'none' | 'crown' | 'celestial' | 'crimson' | 'neon';
+  bannerEffect: BannerEffectId;
+  frameStyle: 'none' | 'crown' | 'celestial' | 'crimson' | 'neon' | AvatarDecorationId;
+  avatarDecoration?: AvatarDecorationId;
   bio: string;
   level: number;
   xp: number;
@@ -53,4 +66,8 @@ export interface UserProfile {
   isVip: boolean;
   provider: AuthProvider;
   joinedAt: string;
+  /** Optional glow colour applied to the username (hex). null/undefined = none. */
+  usernameGlow?: string | null;
+  /** Optional profile visibility switches. Missing = all visible. */
+  visibility?: ProfileVisibility;
 }

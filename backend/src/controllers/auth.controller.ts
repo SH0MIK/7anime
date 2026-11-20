@@ -631,6 +631,98 @@ export async function getMe(req: AuthenticatedRequest, res: Response) {
   });
 }
 
+const VALID_AVATAR_DECORATIONS = new Set([
+  'none',
+  'neon_halo', 'ember_crown', 'sakura_drift', 'frostbite', 'lucky_clover',
+  'thunderstrike', 'heartbeat', 'neko_ears', 'victory_laurel', 'starlight',
+  'pumpkin_night', 'frosty_hat', 'spring_bloom',
+  'butterflies', 'bubbles', 'melody',
+  'cyber_ring', 'crescent_night',
+  'kitsune', 'angel_halo', 'devil_horns', 'jade_dragon',
+  'royal_crown',
+  // Backwards compatibility legacy frames
+  'crown', 'celestial', 'crimson', 'neon',
+]);
+
+const VALID_BANNER_EFFECTS = new Set([
+  'none',
+  'sakura', 'snowfall', 'night_sky', 'fireflies', 'aurora',
+  'embers', 'hearts', 'confetti',
+  'neon_rain', 'autumn_leaves',
+  'bubbles', 'fireworks', 'thunderstorm',
+  'code_rain',
+  // Backwards compatibility legacy aliases
+  'snow', 'stars',
+]);
+
+const AVATAR_DECORATION_REQUIREMENTS: Record<string, { type: 'free' | 'level' | 'seasonal' | 'vip'; level?: number; months?: number[] }> = {
+  'none': { type: 'free' },
+  'neon_halo': { type: 'free' },
+  'ember_crown': { type: 'free' },
+  'sakura_drift': { type: 'free' },
+  'frostbite': { type: 'free' },
+  'lucky_clover': { type: 'free' },
+  'thunderstrike': { type: 'free' },
+  'heartbeat': { type: 'free' },
+  'neko_ears': { type: 'free' },
+  'victory_laurel': { type: 'free' },
+  'starlight': { type: 'free' },
+  'pumpkin_night': { type: 'seasonal', months: [9] }, // October (0-indexed)
+  'frosty_hat': { type: 'seasonal', months: [11, 0, 1] }, // Dec-Feb
+  'spring_bloom': { type: 'seasonal', months: [2, 3, 4] }, // Mar-May
+  'butterflies': { type: 'level', level: 1 },
+  'bubbles': { type: 'level', level: 1 },
+  'melody': { type: 'level', level: 2 },
+  'cyber_ring': { type: 'level', level: 3 },
+  'crescent_night': { type: 'level', level: 3 },
+  'kitsune': { type: 'level', level: 5 },
+  'angel_halo': { type: 'level', level: 5 },
+  'devil_horns': { type: 'level', level: 5 },
+  'jade_dragon': { type: 'level', level: 10 },
+  'royal_crown': { type: 'vip' },
+  'crown': { type: 'vip' },
+  'celestial': { type: 'free' },
+  'crimson': { type: 'free' },
+  'neon': { type: 'free' },
+};
+
+const BANNER_EFFECT_REQUIREMENTS: Record<string, { type: 'free' | 'level' | 'vip'; level?: number }> = {
+  'none': { type: 'free' },
+  'sakura': { type: 'free' },
+  'snowfall': { type: 'free' },
+  'snow': { type: 'free' },
+  'night_sky': { type: 'free' },
+  'stars': { type: 'free' },
+  'fireflies': { type: 'free' },
+  'aurora': { type: 'free' },
+  'embers': { type: 'free' },
+  'hearts': { type: 'free' },
+  'confetti': { type: 'free' },
+  'neon_rain': { type: 'free' },
+  'autumn_leaves': { type: 'free' },
+  'bubbles': { type: 'level', level: 2 },
+  'fireworks': { type: 'level', level: 5 },
+  'thunderstorm': { type: 'level', level: 5 },
+  'code_rain': { type: 'vip' },
+};
+
+function isCosmeticAllowed(
+  reqMeta: { type: 'free' | 'level' | 'seasonal' | 'vip'; level?: number; months?: number[] } | undefined,
+  isVip: boolean,
+  userLevel: number
+): boolean {
+  if (!reqMeta) return true;
+  if (isVip) return true;
+  if (reqMeta.type === 'free') return true;
+  if (reqMeta.type === 'level') return userLevel >= (reqMeta.level ?? 1);
+  if (reqMeta.type === 'seasonal') {
+    const currentMonth = new Date().getMonth();
+    return Boolean(reqMeta.months && reqMeta.months.includes(currentMonth));
+  }
+  if (reqMeta.type === 'vip') return isVip;
+  return false;
+}
+
 /**
  * Updates the user's profile.
  */
@@ -639,7 +731,89 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
 
-  const { username, displayName, avatarUrl, bio } = req.body;
+  const {
+    username,
+    displayName,
+    avatarUrl,
+    bio,
+    avatarDecoration,
+    bannerEffect,
+    bannerUrl,
+    banner,
+    frameStyle,
+  } = req.body;
+
+  const effectiveBannerUrl = bannerUrl || banner;
+
+  const isVip = Boolean(
+    req.user.user_metadata?.isVip ||
+    req.user.user_metadata?.vip ||
+    req.user.app_metadata?.isVip ||
+    req.user.app_metadata?.claims_admin
+  );
+
+  const userLevel = typeof req.user.user_metadata?.level === 'number'
+    ? req.user.user_metadata.level
+    : 0; // Default to Level 0 until a verified progression system exists
+
+  const normalizedAvatarDeco = typeof avatarDecoration === 'string'
+    ? avatarDecoration.replace(/-/g, '_')
+    : avatarDecoration;
+
+  const normalizedBannerEffect = typeof bannerEffect === 'string'
+    ? bannerEffect.replace(/-/g, '_')
+    : bannerEffect;
+
+  // Validate avatar decoration if provided
+  if (normalizedAvatarDeco !== undefined && normalizedAvatarDeco !== null) {
+    if (typeof normalizedAvatarDeco !== 'string' || !VALID_AVATAR_DECORATIONS.has(normalizedAvatarDeco)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid avatar decoration: "${avatarDecoration}". Must be a valid cosmetic ID.`,
+      });
+    }
+
+    const reqMeta = AVATAR_DECORATION_REQUIREMENTS[normalizedAvatarDeco];
+    if (!isCosmeticAllowed(reqMeta, isVip, userLevel)) {
+      return res.status(403).json({
+        success: false,
+        error: `Avatar decoration "${avatarDecoration}" is locked for your current level or membership.`,
+      });
+    }
+  }
+
+  // Validate banner effect if provided
+  if (normalizedBannerEffect !== undefined && normalizedBannerEffect !== null) {
+    if (typeof normalizedBannerEffect !== 'string' || !VALID_BANNER_EFFECTS.has(normalizedBannerEffect)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid banner effect: "${bannerEffect}". Must be a valid banner effect ID.`,
+      });
+    }
+
+    const reqMeta = BANNER_EFFECT_REQUIREMENTS[normalizedBannerEffect];
+    if (!isCosmeticAllowed(reqMeta, isVip, userLevel)) {
+      return res.status(403).json({
+        success: false,
+        error: `Banner effect "${bannerEffect}" is locked for your current level or membership.`,
+      });
+    }
+  }
+
+  // Validate bannerUrl if provided
+  if (effectiveBannerUrl !== undefined && effectiveBannerUrl !== null) {
+    if (typeof effectiveBannerUrl !== 'string') {
+      return res.status(400).json({ success: false, error: 'bannerUrl must be a string' });
+    }
+    const trimmedBanner = effectiveBannerUrl.trim();
+    if (trimmedBanner.length > 7 * 1024 * 1024) {
+      return res.status(400).json({ success: false, error: 'bannerUrl exceeds maximum permitted size (5MB)' });
+    }
+    if (trimmedBanner.toLowerCase().startsWith('javascript:')) {
+      return res.status(400).json({ success: false, error: 'Invalid bannerUrl protocol' });
+    }
+  }
+
   const result = await supabaseService.upsertUserProfile({
     id: req.user.id,
     email: req.user.email,
@@ -647,6 +821,10 @@ export async function updateProfile(req: AuthenticatedRequest, res: Response) {
     displayName,
     avatarUrl,
     bio,
+    avatarDecoration: normalizedAvatarDeco || undefined,
+    bannerEffect: normalizedBannerEffect || undefined,
+    bannerUrl: effectiveBannerUrl || undefined,
+    frameStyle: frameStyle || undefined,
   });
 
   if (!result.success) {
