@@ -25,7 +25,29 @@ export const SearchModal: React.FC = () => {
 
   useEffect(() => {
     if (searchOpen) {
-      setTimeout(() => inputRef.current?.focus(), 40);
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          const len = inputRef.current.value.length;
+          inputRef.current.setSelectionRange?.(len, len);
+        }
+      }, 40);
+
+      const onModalKey = (e: KeyboardEvent) => {
+        if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+          const target = e.target as HTMLElement | null;
+          if (target !== inputRef.current && (!target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }
+        }
+      };
+
+      window.addEventListener('keydown', onModalKey);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('keydown', onModalKey);
+      };
     } else {
       setListening(false);
     }
@@ -188,6 +210,7 @@ export const SearchModal: React.FC = () => {
             <Search size={17} style={{ opacity: 0.7, flexShrink: 0 }} />
             <input
               ref={inputRef}
+              autoFocus
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}

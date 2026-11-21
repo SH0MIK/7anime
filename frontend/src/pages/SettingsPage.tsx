@@ -20,6 +20,7 @@ import { AccountSection, ACCOUNT_SUBS, type AccountSub } from '@/src/components/
 import { useApp } from '@/src/context/AppContext';
 import { ACCENT_SWATCHES, THEME_OPTIONS } from '@/src/utils/themeUtils';
 import { ProfileStyleModal } from '@/src/components/profile/ProfileStyleModal';
+import { apiClient } from '@/src/services/apiClient';
 
 type SettingsSection =
   | 'account'
@@ -735,7 +736,12 @@ export const SettingsPage: React.FC = () => {
           onClose={() => setIsStyleModalOpen(false)}
           currentDecoration={user.avatarDecoration}
           currentBannerEffect={user.bannerEffect}
-          onSave={(dec, bfx) => updateUserProfile({ avatarDecoration: dec, bannerEffect: bfx })}
+          onSave={(dec, bfx) => {
+            updateUserProfile({ avatarDecoration: dec, bannerEffect: bfx });
+            if (apiClient.isAuthenticated()) {
+              apiClient.updateProfile({ avatarDecoration: dec, bannerEffect: bfx }).catch(() => {});
+            }
+          }}
         />
       )}
     </div>

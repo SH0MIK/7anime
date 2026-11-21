@@ -70,19 +70,34 @@ class ApiClient {
   private authToken: string | null = null;
   private animeCache = new Map<string, { data: ResolvedAnime; timestamp: number }>();
   private artworkCache = new Map<string, { data: ArtworkResolution; timestamp: number }>();
+  private logoCache = new Map<string, { data: AnimeLogoResult | null; expiresAt: number }>();
   private inFlightRequests = new Map<string, Promise<any>>();
   private refreshPromise: Promise<boolean> | null = null;
   private readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  private readonly LOGO_NEGATIVE_CACHE_TTL_MS = 60 * 1000; // 60 seconds (short negative TTL)
 
   private readonly SESSION_STORAGE_KEY = '7anime_auth_session';
 
   constructor() {
-    const rawEnv = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim();
-    if (!rawEnv) {
-      this.baseUrl = '/api';
-    } else {
-      const clean = rawEnv.replace(/\/+$/, '');
+    const isDev = Boolean(import.meta.env.DEV);
+
+    if (isDev) {
+      // Local development MUST communicate ONLY with the local backend by default.
+      // An explicit development override can be provided via VITE_DEV_API_BASE_URL.
+      // Standard production environment variables (VITE_API_BASE_URL / VITE_API_URL) NEVER route dev traffic to Render.
+      const devOverride = (import.meta.env.VITE_DEV_API_BASE_URL as string | undefined)?.trim();
+      const raw = devOverride || 'http://localhost:3001/api';
+      const clean = raw.replace(/\/+$/, '');
       this.baseUrl = clean.endsWith('/api') ? clean : `${clean}/api`;
+    } else {
+      // Production mode: communicate with Render backend via Vercel env variable, or fallback to /api
+      const prodUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim();
+      if (!prodUrl) {
+        this.baseUrl = '/api';
+      } else {
+        const clean = prodUrl.replace(/\/+$/, '');
+        this.baseUrl = clean.endsWith('/api') ? clean : `${clean}/api`;
+      }
     }
 
     // Restore active session token from tab-scoped sessionStorage if present
@@ -573,19 +588,70 @@ class ApiClient {
   }
 
   /**
-   * Fetches genuine transparent TMDB title logo for an anime.
+   * Fetches genuine transparent TMDB title logo for an anime with client-side caching and in-flight deduplication.
    */
   async getLogo(anilistId: number | string): Promise<AnimeLogoResult | null> {
-    try {
-      const res = await fetch(`${this.baseUrl}/anime/${anilistId}/logo`, {
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json.success ? (json.data as AnimeLogoResult) : null;
-    } catch {
-      return null;
+    const key = String(anilistId);
+
+    // 1. Check in-memory logo cache with explicit expiration
+    const cached = this.logoCache.get(key);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
     }
+
+    // 2. In-flight request deduplication
+    const inFlightKey = `logo:${key}`;
+    const existing = this.inFlightRequests.get(inFlightKey);
+    if (existing) {
+      return existing;
+    }
+
+    const requestPromise = (async (): Promise<AnimeLogoResult | null> => {
+      try {
+        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/logo`, {
+          headers: this.getHeaders(),
+        });
+
+        if (!res.ok) {
+          // HTTP 404: cache null for 60 seconds
+          if (res.status === 404) {
+            this.logoCache.set(key, {
+              data: null,
+              expiresAt: Date.now() + this.LOGO_NEGATIVE_CACHE_TTL_MS,
+            });
+          }
+          // HTTP 5xx and other transient server errors: return null without caching
+          return null;
+        }
+
+        const json = await res.json();
+        const logo = json.success && json.data ? (json.data as AnimeLogoResult) : null;
+
+        if (logo) {
+          // Successful response containing a logo: cache for 30 minutes
+          this.logoCache.set(key, {
+            data: logo,
+            expiresAt: Date.now() + this.CACHE_TTL_MS,
+          });
+        } else {
+          // Successful response containing no logo: cache null for 60 seconds
+          this.logoCache.set(key, {
+            data: null,
+            expiresAt: Date.now() + this.LOGO_NEGATIVE_CACHE_TTL_MS,
+          });
+        }
+
+        return logo;
+      } catch {
+        // Network errors: return null without caching
+        return null;
+      } finally {
+        this.inFlightRequests.delete(inFlightKey);
+      }
+    })();
+
+    this.inFlightRequests.set(inFlightKey, requestPromise);
+    return requestPromise;
   }
 
   /**
@@ -600,7 +666,14 @@ class ApiClient {
       });
       if (!res.ok) return {};
       const json = await res.json();
-      return json.success ? (json.data as Record<string, AnimeLogoResult | null>) : {};
+      const results = json.success ? (json.data as Record<string, AnimeLogoResult | null>) : {};
+      const now = Date.now();
+      for (const [id, logo] of Object.entries(results)) {
+        // Successful logo cached for 30m; null result cached for short 60s negative TTL
+        const ttl = logo ? this.CACHE_TTL_MS : this.LOGO_NEGATIVE_CACHE_TTL_MS;
+        this.logoCache.set(id, { data: logo, expiresAt: now + ttl });
+      }
+      return results;
     } catch {
       return {};
     }

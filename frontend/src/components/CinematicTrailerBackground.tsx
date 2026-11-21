@@ -15,11 +15,13 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
   const [hasError, setHasError] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // Reset state when trailerKey changes
+  const cleanTrailerKey = trailerKey ? trailerKey.trim() : null;
+
+  // Reset state when cleanTrailerKey changes
   useEffect(() => {
     setIsVideoVisible(false);
     setHasError(false);
-  }, [trailerKey]);
+  }, [cleanTrailerKey]);
 
   // Handle visibility change (pause video when tab is hidden)
   useEffect(() => {
@@ -66,17 +68,16 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
   }, []);
 
   const handleIframeLoad = useCallback(() => {
-    // Delay fade-in slightly so YouTube's first frame renders before revealing
+    // Delay reveal slightly so YouTube's first frame renders before fading in
     const timer = setTimeout(() => {
       setIsVideoVisible(true);
-    }, 1200);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, []);
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const embedUrl = trailerKey && !hasError
-    ? `https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${trailerKey}&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=${encodeURIComponent(origin)}`
+  const embedUrl = cleanTrailerKey && !hasError
+    ? `https://www.youtube-nocookie.com/embed/${cleanTrailerKey}?autoplay=1&mute=1&controls=0&loop=1&playlist=${cleanTrailerKey}&playsinline=1&rel=0&modestbranding=1&enablejsapi=1`
     : null;
 
   return (
@@ -87,10 +88,14 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
         top: 0,
         left: 0,
         right: 0,
-        height: 560,
+        height: 'var(--detail-hero-h, clamp(660px, 74vh, 780px))',
         zIndex: 0,
         overflow: 'hidden',
         pointerEvents: 'none',
+        WebkitMaskImage:
+          'linear-gradient(to bottom, #000000 0%, #000000 55%, rgba(0, 0, 0, 0.96) 68%, rgba(0, 0, 0, 0.78) 78%, rgba(0, 0, 0, 0.45) 88%, rgba(0, 0, 0, 0.12) 95%, transparent 100%)',
+        maskImage:
+          'linear-gradient(to bottom, #000000 0%, #000000 55%, rgba(0, 0, 0, 0.96) 68%, rgba(0, 0, 0, 0.78) 78%, rgba(0, 0, 0, 0.45) 88%, rgba(0, 0, 0, 0.12) 95%, transparent 100%)',
       }}
     >
       {/* 1. Static Backdrop Layer (Always present, zero layout shift) */}
@@ -104,9 +109,9 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            objectPosition: 'center 22%',
-            opacity: 0.72,
-            transition: 'opacity 0.6s ease',
+            objectPosition: 'center 20%',
+            opacity: isVideoVisible ? 0.35 : 0.95,
+            transition: 'opacity 0.8s ease',
           }}
         />
       )}
@@ -121,7 +126,7 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
             height: '100%',
             overflow: 'hidden',
             opacity: isVideoVisible ? 1 : 0,
-            transition: 'opacity 1.2s ease-in-out',
+            transition: 'opacity 0.6s ease-in-out',
             pointerEvents: 'none',
           }}
         >
@@ -129,8 +134,7 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
             ref={iframeRef}
             src={embedUrl}
             title={`${title || 'Anime'} Trailer`}
-            allow="autoplay; encrypted-media"
-            referrerPolicy="origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             onLoad={handleIframeLoad}
             onError={() => {
               setHasError(true);
@@ -140,31 +144,19 @@ export const CinematicTrailerBackground: React.FC<CinematicTrailerBackgroundProp
               position: 'absolute',
               top: '50%',
               left: '50%',
-              width: '120vw',
-              height: '120vh',
-              minWidth: '100%',
-              minHeight: '100%',
-              transform: 'translate(-50%, -50%) scale(1.15)',
+              width: 'max(100%, calc(var(--detail-hero-h, 680px) * 1.778))',
+              height: 'max(var(--detail-hero-h, 680px), 56.25vw)',
+              transform: 'translate(-50%, -50%)',
               border: 0,
               pointerEvents: 'none',
-              filter: 'brightness(0.92) contrast(1.05)',
+              filter: 'contrast(1.02) saturate(1.04)',
             }}
           />
         </div>
       )}
 
       {/* 3. Cinematic Dark Gradient Vignette Overlay (Sits over video and image) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: `
-            linear-gradient(180deg, rgba(10, 10, 14, 0.28) 0%, rgba(10, 10, 14, 0.56) 56%, rgb(var(--c-bg, 10, 10, 14)) 100%),
-            linear-gradient(90deg, rgba(10, 10, 14, 0.82) 0%, rgba(10, 10, 14, 0.35) 55%, rgba(10, 10, 14, 0.5) 100%)
-          `,
-          pointerEvents: 'none',
-        }}
-      />
+      <div className="detail-hero__overlay" />
     </div>
   );
 };

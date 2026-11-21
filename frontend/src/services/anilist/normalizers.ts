@@ -60,10 +60,11 @@ export function normalizeAniListMedia(media: AniListMedia): AnimeTitle {
   // Trailer normalization
   let trailer: AnimeTitle['trailer'] = null;
   if (media.trailer && media.trailer.site?.toLowerCase() === 'youtube' && media.trailer.id) {
+    const cleanId = media.trailer.id.trim();
     trailer = {
       source: 'youtube',
-      key: media.trailer.id,
-      url: `https://www.youtube.com/watch?v=${media.trailer.id}`,
+      key: cleanId,
+      url: `https://www.youtube.com/watch?v=${cleanId}`,
       site: 'youtube',
       official: true,
     };

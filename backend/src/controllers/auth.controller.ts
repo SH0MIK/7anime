@@ -6,13 +6,14 @@ import { mailerService } from '../services/mail/mailer.service.js';
 import { AuthenticatedRequest, extractBearerToken, extractCookie } from '../middleware/auth.middleware.js';
 import {
   authStore,
-  OAuthStateRecord,
-  AuthTicketRecord,
+  type OAuthStateRecord,
+  type AuthTicketRecord,
   STATE_TTL_SECONDS,
   TICKET_TTL_SECONDS,
 } from '../services/auth/auth-store.service.js';
 
-export { OAuthStateRecord, AuthTicketRecord, STATE_TTL_SECONDS, TICKET_TTL_SECONDS, authStore };
+export { STATE_TTL_SECONDS, TICKET_TTL_SECONDS, authStore };
+export type { OAuthStateRecord, AuthTicketRecord };
 
 // Backwards-compatible map aliases backed by authStore
 export const oauthStateMap = authStore.localOAuthStateMap;

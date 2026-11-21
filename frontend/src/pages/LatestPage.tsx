@@ -44,6 +44,21 @@ export const LatestPage: React.FC = () => {
     loadLatest();
   }, []);
 
+  // Index landscape artwork by id, routeId, slug, and title from animeList for optimal image resolution
+  const landscapeMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of animeList) {
+      const landscape = a.banner || a.artwork?.banner || a.artwork?.background || a.background;
+      if (landscape) {
+        if (a.id) map.set(String(a.id), landscape);
+        if (a.routeId) map.set(a.routeId, landscape);
+        if (a.slug) map.set(a.slug, landscape);
+        if (a.title) map.set(a.title.toLowerCase().trim(), landscape);
+      }
+    }
+    return map;
+  }, [animeList]);
+
   const items = useMemo(() => {
     let base: Array<{
       routeId: string;
@@ -57,27 +72,47 @@ export const LatestPage: React.FC = () => {
     }> = [];
 
     if (recentAiring.length > 0) {
-      base = recentAiring.map((ep) => ({
-        routeId: ep.routeId,
-        title: ep.title,
-        episode: ep.episode,
-        thumbnail: ep.thumbnail || ep.poster || null,
-        duration: ep.duration || '24m',
-        timeAgo: ep.timeAgoText || 'Recently',
-        hasSub: ep.hasSub,
-        hasDub: ep.hasDub,
-      }));
+      base = recentAiring.map((ep) => {
+        // Priority 1: Check if ep has an explicit landscape thumbnail (different from portrait poster)
+        const isThumbnailLandscape = Boolean(ep.thumbnail && ep.thumbnail !== ep.poster);
+        // Priority 2: Check matching landscape banner/background from animeList metadata
+        const landscapeFromList =
+          (ep.anilistId && landscapeMap.get(String(ep.anilistId))) ||
+          landscapeMap.get(ep.routeId) ||
+          landscapeMap.get(ep.title.toLowerCase().trim());
+
+        const chosenImage =
+          (isThumbnailLandscape ? ep.thumbnail : (landscapeFromList || ep.thumbnail || ep.poster)) || null;
+
+        return {
+          routeId: ep.routeId,
+          title: ep.title,
+          episode: ep.episode,
+          thumbnail: chosenImage || null,
+          duration: ep.duration || '24m',
+          timeAgo: ep.timeAgoText || 'Recently',
+          hasSub: ep.hasSub,
+          hasDub: ep.hasDub,
+        };
+      });
     } else {
-      base = animeList.map((a) => ({
-        routeId: a.routeId,
-        title: a.title,
-        episode: a.subCount || 1,
-        thumbnail: a.banner || a.poster,
-        duration: typeof a.duration === 'string' ? a.duration : '24:00',
-        timeAgo: 'Recently',
-        hasSub: true,
-        hasDub: a.dubCount > 0,
-      }));
+      base = animeList.map((a) => {
+        // Priority 1: Landscape banner / background
+        const landscapeImg = a.banner || a.artwork?.banner || a.artwork?.background || a.background;
+        // Priority 2: Cover or poster as fallback
+        const chosenImage = landscapeImg || a.cover || a.poster || null;
+
+        return {
+          routeId: a.routeId,
+          title: a.title,
+          episode: a.subCount || 1,
+          thumbnail: chosenImage || null,
+          duration: typeof a.duration === 'string' ? a.duration : '24:00',
+          timeAgo: 'Recently',
+          hasSub: true,
+          hasDub: a.dubCount > 0,
+        };
+      });
     }
 
     return base.filter((ep) => {
@@ -88,7 +123,7 @@ export const LatestPage: React.FC = () => {
       }
       return true;
     });
-  }, [recentAiring, animeList, mode, query]);
+  }, [recentAiring, animeList, landscapeMap, mode, query]);
 
   return (
     <div className="page-shell">
@@ -162,7 +197,6 @@ export const LatestPage: React.FC = () => {
                     src={ep.thumbnail}
                     alt={ep.title}
                     loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
                   <div className="latest-ep-fallback">
@@ -178,15 +212,16 @@ export const LatestPage: React.FC = () => {
                   {ep.title}
                 </h3>
                 <div className="latest-ep-tags">
+                  <span className="latest-ep-epnum">Episode {ep.episode}</span>
                   {ep.hasSub && (
                     <span className="lang-pill sub">
-                      <Captions size={10} />
+                      <Captions size={11} />
                       <span>SUB</span>
                     </span>
                   )}
                   {ep.hasDub && (
                     <span className="lang-pill dub">
-                      <Mic size={10} />
+                      <Mic size={11} />
                       <span>DUB</span>
                     </span>
                   )}

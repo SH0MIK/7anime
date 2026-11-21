@@ -23,32 +23,38 @@ app.use((_req, res, next) => {
   next();
 });
 
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, health checks)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Localhost origins are permitted ONLY during local development (NODE_ENV === 'development')
+    const isDevOrigin =
+      config.nodeEnv === 'development' && (
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:')
+      );
+
+    // In production, permit only configured production origins (e.g. https://7anime-new.vercel.app, CORS_ORIGIN)
+    const isAllowed = isDevOrigin || config.corsOrigins.includes(origin);
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200,
+};
+
 // Configurable CORS with local development support
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, health checks)
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      // Check configured allowed origins or local development origins
-      const isAllowed =
-        config.corsOrigins.includes(origin) ||
-        (config.nodeEnv === 'development' && (
-          origin.startsWith('http://localhost:') ||
-          origin.startsWith('http://127.0.0.1:')
-        ));
-
-      if (isAllowed) {
-        return callback(null, true);
-      }
-
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(express.json({ limit: '1mb' }));
 

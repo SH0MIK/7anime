@@ -75,10 +75,12 @@ export const AnimeDetailPage: React.FC = () => {
   const [liveRecommendations, setLiveRecommendations] = useState<AnimeTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [logoError, setLogoError] = useState(false);
 
   async function loadDetailData() {
     setIsLoading(true);
     setError(null);
+    setLogoError(false);
 
     // 1. Extract or search AniList ID
     let targetId = extractAniListId(id);
@@ -101,15 +103,17 @@ export const AnimeDetailPage: React.FC = () => {
     }
 
     try {
-      const [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
+      const [backendResolved, anilistDetails, episodesResult, logoResult] = await Promise.allSettled([
         apiClient.getAnimeById(targetId),
         AniListService.getAnimeDetails(targetId),
         apiClient.getEpisodes(targetId),
+        apiClient.getLogo(targetId),
       ]);
 
       const backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
       const anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
       const catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+      const directLogo = logoResult.status === 'fulfilled' ? logoResult.value?.logoUrl : undefined;
       if (catData) {
         setEpisodesData(catData);
       }
@@ -163,8 +167,10 @@ export const AnimeDetailPage: React.FC = () => {
         setArtwork(resolvedArt);
         if (resolvedArt.poster) base.poster = resolvedArt.poster;
         if (resolvedArt.backdrop) base.banner = resolvedArt.backdrop;
-        if (resolvedArt.logo) base.logo = resolvedArt.logo;
+        if (resolvedArt.logo || directLogo) base.logo = resolvedArt.logo || directLogo;
         if (resolvedArt.trailer) base.trailer = resolvedArt.trailer;
+      } else if (directLogo) {
+        base.logo = directLogo;
       }
 
       setAnime(base);
@@ -366,10 +372,10 @@ export const AnimeDetailPage: React.FC = () => {
                   {episodesData?.totalAnnouncedEpisodes
                     ? episodesData.totalAnnouncedEpisodes.toLocaleString()
                     : isOngoing
-                    ? 'Ongoing (TBA)'
-                    : anime.episodeCount > 0
-                    ? anime.episodeCount.toLocaleString()
-                    : '—'}
+                      ? 'Ongoing (TBA)'
+                      : anime.episodeCount > 0
+                        ? anime.episodeCount.toLocaleString()
+                        : '—'}
                 </div>
               </div>
               {episodesData?.airedEpisodeCount != null && (
@@ -507,27 +513,20 @@ export const AnimeDetailPage: React.FC = () => {
           </div>
 
           <div className="detail-main-col" style={{ minWidth: 0 }}>
-            {anime.logo ? (
+            {anime.logo && !logoError ? (
               <img
                 src={anime.logo}
                 alt={displayTitle}
-                className="spot-logo"
-                style={{
-                  height: 110,
-                  maxWidth: '100%',
-                  objectFit: 'contain',
-                  objectPosition: 'left center',
-                  marginBottom: 14,
-                  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.45))',
-                }}
+                className="spot-logo detail-hero-logo"
+                onError={() => setLogoError(true)}
               />
             ) : (
-              <h1 style={{ margin: '0 0 12px', fontSize: 'clamp(28px, 3.6vw, 46px)', fontWeight: 700, lineHeight: 1.05 }}>
+              <h1 className="detail-hero-title">
                 {displayTitle}
               </h1>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            <div className="detail-hero-chips">
               {anime.score !== null && (
                 <span className="spot-meta-frost score">
                   <Star size={13} />
@@ -557,12 +556,8 @@ export const AnimeDetailPage: React.FC = () => {
             </div>
 
             <p
+              className="detail-hero-synopsis"
               style={{
-                maxWidth: 740,
-                margin: 0,
-                fontSize: 15,
-                lineHeight: 1.55,
-                color: 'rgba(255,255,255,0.88)',
                 display: expandedSyn ? 'block' : '-webkit-box',
                 WebkitBoxOrient: 'vertical',
                 WebkitLineClamp: expandedSyn ? undefined : 3,
@@ -590,21 +585,10 @@ export const AnimeDetailPage: React.FC = () => {
               </button>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 20 }}>
+            <div className="detail-hero-actions">
               <Link
                 to={`/anime/${anime.routeId}?ep=1`}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  height: 44,
-                  padding: '0 28px',
-                  borderRadius: 999,
-                  background: '#ffffff',
-                  color: '#09090b',
-                  fontWeight: 700,
-                  fontSize: 15,
-                }}
+                className="detail-hero-watch-btn"
               >
                 <Play size={17} fill="currentColor" />
                 <span>{t('detail.watchNow')}</span>
@@ -632,7 +616,7 @@ export const AnimeDetailPage: React.FC = () => {
                 aria-label="Share anime"
                 title="Share"
                 onClick={() => {
-                  navigator.clipboard?.writeText(window.location.href).catch(() => {});
+                  navigator.clipboard?.writeText(window.location.href).catch(() => { });
                   showToast('Link copied to clipboard');
                 }}
               >

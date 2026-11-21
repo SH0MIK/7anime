@@ -72,7 +72,7 @@ Inspection of `E:\7ANIME_CODEX\.env` (executed strictly in read-only mode) revea
   * Use AniList GraphQL API as the primary open catalog index (no secret key required for public catalog).
   * Use TMDB v3 API key and v4 Bearer token for cinematic media, backdrops, transparent PNG logos, and video trailers.
   * Resolve IMDb IDs directly through TMDB's `/find` and external IDs endpoints (`imdb_id`).
-  * Implement public MAL/Jikan fallbacks for MAL ratings and ranking statistics without requiring developer API keys.
+  * Implement public MAL fallbacks for MAL ratings and ranking statistics without requiring developer API keys.
 
 ---
 

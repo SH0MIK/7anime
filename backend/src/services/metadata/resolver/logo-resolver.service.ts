@@ -1,6 +1,7 @@
 import { AnimeLogoResult } from '@7anime/shared';
-import { TmdbProvider, TmdbImagesResponse, TMDB_IMAGE_ORIGINAL } from '../providers/tmdb.provider.js';
+import { TmdbProvider, TmdbImagesResponse, TmdbImageItem, TMDB_IMAGE_ORIGINAL } from '../providers/tmdb.provider.js';
 import { ExternalIdResolverService, ResolvedExternalIds } from './external-id-resolver.service.js';
+import { CANONICAL_OVERRIDES } from './anime-matcher.service.js';
 import { redisCache } from '../../cache/redis-cache.service.js';
 
 interface CachedLogoPayload {
@@ -11,7 +12,7 @@ interface CachedLogoPayload {
 
 const inFlightLogoRequests = new Map<number, Promise<AnimeLogoResult | null>>();
 const LOGO_CACHE_TTL = 86400 * 30; // 30 days
-const LOGO_NEGATIVE_TTL = 86400 * 7; // 7 days
+const LOGO_NEGATIVE_TTL = 900; // 15 minutes (short negative TTL prevents long-term cache poisoning)
 
 export class LogoResolverService {
   /**
@@ -20,22 +21,27 @@ export class LogoResolverService {
   public static async resolveLogo(
     anilistId: number,
     hintTmdbId?: number,
-    hintMediaType?: 'tv' | 'movie'
+    hintMediaType?: 'tv' | 'movie',
+    prefetchedLogos?: TmdbImageItem[]
   ): Promise<AnimeLogoResult | null> {
     if (!Number.isInteger(anilistId) || anilistId <= 0) {
       return null;
     }
 
-    const cacheKey = `anime:logo:${anilistId}`;
+    // Versioned cache key (v2) to immediately bypass any historical 7-day negative cache
+    const cacheKey = `anime:logo:v2:${anilistId}`;
 
     // 1. Check Redis Cache
     try {
       const cached = await redisCache.get<CachedLogoPayload>(cacheKey);
       if (cached) {
         if (cached.notFound) {
-          return null;
-        }
-        if (cached.logo && cached.logo.logoUrl && cached.logo.filePath) {
+          // When non-empty prefetchedLogos are supplied, do not immediately return null;
+          // allow the supplied prefetched logos to be evaluated.
+          if (!prefetchedLogos || prefetchedLogos.length === 0) {
+            return null;
+          }
+        } else if (cached.logo && cached.logo.logoUrl && cached.logo.filePath) {
           return cached.logo;
         }
       }
@@ -56,10 +62,15 @@ export class LogoResolverService {
 
         // Resolve TMDB ID and media type if not provided
         if (!tmdbId || !mediaType) {
-          const extIds = await ExternalIdResolverService.resolve(anilistId);
-          if (extIds && extIds.tmdbId && extIds.mediaType) {
-            tmdbId = extIds.tmdbId;
-            mediaType = extIds.mediaType;
+          if (CANONICAL_OVERRIDES[anilistId]) {
+            tmdbId = CANONICAL_OVERRIDES[anilistId].tmdbId;
+            mediaType = CANONICAL_OVERRIDES[anilistId].mediaType;
+          } else {
+            const extIds = await ExternalIdResolverService.resolve(anilistId);
+            if (extIds && extIds.tmdbId && extIds.mediaType) {
+              tmdbId = extIds.tmdbId;
+              mediaType = extIds.mediaType;
+            }
           }
         }
 
@@ -73,12 +84,16 @@ export class LogoResolverService {
           return null;
         }
 
-        // Query TMDB images endpoint
-        const images: TmdbImagesResponse | null = mediaType === 'movie'
-          ? await TmdbProvider.getMovieImages(tmdbId)
-          : await TmdbProvider.getTvImages(tmdbId);
+        // Reuse prefetched logos if available, otherwise query TMDB images endpoint
+        let logos = prefetchedLogos;
+        if (!logos) {
+          const images: TmdbImagesResponse | null = mediaType === 'movie'
+            ? await TmdbProvider.getMovieImages(tmdbId)
+            : await TmdbProvider.getTvImages(tmdbId);
+          logos = images?.logos;
+        }
 
-        if (!images || !images.logos || images.logos.length === 0) {
+        if (!logos || logos.length === 0) {
           void redisCache.set(
             cacheKey,
             { notFound: true, cachedAt: Date.now() },
@@ -88,7 +103,7 @@ export class LogoResolverService {
         }
 
         // Select the highest quality transparent logo matching language priority
-        const bestLogo = TmdbProvider.selectBestLogo(images.logos);
+        const bestLogo = TmdbProvider.selectBestLogo(logos);
 
         if (!bestLogo) {
           void redisCache.set(

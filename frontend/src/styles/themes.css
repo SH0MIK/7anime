@@ -197,6 +197,27 @@ html[data-theme-mode='light'] .content.browse-scroll:not([data-page='home']) {
 
 html[data-theme-mode='light'] .sitebar:not([data-over-art='true']) {
   color: rgb(var(--c-text));
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 12px 32px -4px rgba(0, 0, 0, 0.1),
+    0 2px 8px -2px rgba(0, 0, 0, 0.06),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+html[data-theme-mode='light'] .sitebar:not([data-over-art='true'])[data-scrolled='true'] {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow:
+    0 16px 36px -4px rgba(0, 0, 0, 0.14),
+    0 4px 12px -2px rgba(0, 0, 0, 0.08),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+@supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
+  html[data-theme-mode='light'] .sitebar:not([data-over-art='true']) {
+    background: rgba(255, 255, 255, 0.96);
+  }
 }
 
 html[data-theme-mode='light'] .sitebar:not([data-over-art='true']) .sitebar__word {
@@ -262,12 +283,31 @@ html[data-theme-mode='light'] .genre-row {
   border-bottom-color: rgb(var(--c-line));
 }
 
+html[data-theme-mode='light'] .latest-ep-thumb {
+  background: #e5e7eb;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme-mode='light'] .latest-ep-card:hover .latest-ep-thumb {
+  border-color: rgba(0, 0, 0, 0.18);
+  box-shadow: 0 10px 24px -2px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme-mode='light'] .latest-ep-card:hover .latest-ep-title {
+  color: #7c3aed;
+}
+
+html[data-theme-mode='light'] .latest-ep-card.is-loading .latest-ep-thumb {
+  background: rgba(0, 0, 0, 0.06);
+}
+
 html[data-theme-mode='light'] .sitebar:not([data-over-art='true']) .sitebar__shade {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 65%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.1) 40%, transparent 100%);
 }
 
 html[data-theme-mode='light'] .sitebar:not([data-over-art='true'])[data-scrolled='true'] .sitebar__shade {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.56) 68%, rgba(255, 255, 255, 0) 100%);
+  opacity: 0.9;
 }
 
 html[data-theme-mode='light'] .sitebar:not([data-over-art='true']) .sitebar__mark,

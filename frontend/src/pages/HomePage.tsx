@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Bookmark,
   Captions,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Info,
-  MessageSquare,
   Mic,
   Play,
   Star,
@@ -47,8 +45,6 @@ export const HomePage: React.FC = () => {
     dir,
     contentPrefs,
     library,
-    chatMessages,
-    setChatOpen,
     backupBannerDismissed,
     dismissBackupBanner,
   } = useApp();
@@ -73,7 +69,6 @@ export const HomePage: React.FC = () => {
   const [newFormatOpen, setNewFormatOpen] = useState(false);
 
   const [commentTab, setCommentTab] = useState<'newest' | 'top'>('newest');
-  const [tickerIdx, setTickerIdx] = useState(0);
 
   // Live AniList data state
   const [feedData, setFeedData] = useState<HomepageFeedData | null>(null);
@@ -134,6 +129,28 @@ export const HomePage: React.FC = () => {
   }, [slides]);
 
   const activeSlide = slides[slideIdx] ?? slides[0];
+  const [spotlightLogoError, setSpotlightLogoError] = useState(false);
+
+  // Reset image error state whenever active carousel slide changes
+  useEffect(() => {
+    setSpotlightLogoError(false);
+  }, [activeSlide?.id]);
+
+  // Priority fetch for currently active hero slide logo if not yet populated
+  useEffect(() => {
+    if (!activeSlide?.id) return;
+    const strId = String(activeSlide.id);
+    if (!spotlightLogos[strId] && !activeSlide.logo) {
+      apiClient
+        .getLogo(activeSlide.id)
+        .then((res) => {
+          if (res?.logoUrl) {
+            setSpotlightLogos((prev) => ({ ...prev, [strId]: res.logoUrl }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeSlide?.id, spotlightLogos]);
 
   useEffect(() => {
     if (paused || slides.length <= 1) return;
@@ -142,14 +159,6 @@ export const HomePage: React.FC = () => {
     }, 6500);
     return () => window.clearInterval(id);
   }, [paused, slides.length]);
-
-  useEffect(() => {
-    if (chatMessages.length <= 1) return;
-    const id = window.setInterval(() => {
-      setTickerIdx((prev) => (prev + 1) % chatMessages.length);
-    }, 4500);
-    return () => window.clearInterval(id);
-  }, [chatMessages.length]);
 
   const sortBySource = (list: AnimeTitle[], src: RankSource) => {
     const copy = [...list];
@@ -277,7 +286,6 @@ export const HomePage: React.FC = () => {
     });
   }, [feedData]);
 
-  const liveMsg = chatMessages[tickerIdx % Math.max(1, chatMessages.length)];
   const currentBanner = activeSlide?.banner ?? activeSlide?.poster;
 
   const prevSlide = () => setSlideIdx((prev) => (prev - 1 + slides.length) % slides.length);
@@ -364,21 +372,15 @@ export const HomePage: React.FC = () => {
           <div className="spot-body">
             <div className="spot-copy">
               {(() => {
-                const activeLogo = (spotlightLogos[String(activeSlide.id)] || activeSlide.logo) || undefined;
+                const activeLogo = !spotlightLogoError
+                  ? (spotlightLogos[String(activeSlide.id)] || activeSlide.logo) || undefined
+                  : undefined;
                 return activeLogo ? (
                   <img
                     src={activeLogo}
                     alt={getDisplayTitle(activeSlide, contentPrefs.titleLanguage === 'original')}
                     className="spot-logo"
-                    style={{
-                      maxHeight: 110,
-                      maxWidth: '85%',
-                      objectFit: 'contain',
-                      objectPosition: 'left center',
-                      display: 'block',
-                      filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.65))',
-                      marginBottom: '0.75rem',
-                    }}
+                    onError={() => setSpotlightLogoError(true)}
                   />
                 ) : (
                   <h1
@@ -455,56 +457,6 @@ export const HomePage: React.FC = () => {
 
       {/* Main Content Rails */}
       <div className="rows">
-        {/* Site Activity Floating Pill */}
-        <div className="home-activity-pill spot-meta-frost">
-          <div className="home-activity-pill__counts">
-            <span className="home-activity-pill__stat">
-              <span className="home-activity-pill__dot" />
-              <strong>23,303</strong> {t('home.watching')}
-            </span>
-            <span className="home-activity-pill__stat-divider" />
-            <span className="home-activity-pill__stat">
-              <strong>87,375</strong> {t('home.online')}
-            </span>
-          </div>
-
-          <span className="home-activity-pill__chat-divider" />
-
-          <button
-            type="button"
-            className="home-activity-pill__chat"
-            onClick={() => setChatOpen(true)}
-            title="Open live community chat"
-          >
-            <MessageSquare size={12} style={{ flexShrink: 0, opacity: 0.78 }} />
-            {liveMsg && (
-              <span className="home-activity-pill__message">
-                <span className="home-activity-pill__name">{liveMsg.username}:</span>
-                <span className="home-activity-pill__body">{liveMsg.body}</span>
-              </span>
-            )}
-          </button>
-
-          <span className="home-activity-pill__chat-divider" />
-
-          <span className="home-activity-pill__mirrors">
-            <Bookmark size={12} style={{ opacity: 0.72 }} />
-            <span>{t('home.bookmark')}</span>
-            <Link to="/" className="home-activity-pill__mirror">
-              7Anime
-            </Link>
-            <span>&amp;</span>
-            <a
-              href="https://7anime.ct.ws"
-              target="_blank"
-              rel="noreferrer"
-              className="home-activity-pill__mirror"
-            >
-              7anime.ct.ws
-            </a>
-          </span>
-        </div>
-
         {/* Continue Watching Rail */}
         {contentPrefs.showContinueWatchingOnHome && library.history.length > 0 && (
           <MediaCarousel

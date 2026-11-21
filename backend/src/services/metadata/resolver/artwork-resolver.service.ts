@@ -54,8 +54,13 @@ export class ArtworkResolverService {
         ]);
 
         if (images) {
-          // Transparent PNG logo
-          const logoResult = await LogoResolverService.resolveLogo(media.id, tmdbId, mediaType);
+          // Transparent PNG logo — reuse already-fetched images.logos to prevent duplicate TMDB images API requests
+          const logoResult = await LogoResolverService.resolveLogo(
+            media.id,
+            tmdbId,
+            mediaType,
+            images.logos
+          );
           if (logoResult?.logoUrl) {
             tmdbLogoUrl = logoResult.logoUrl;
           }

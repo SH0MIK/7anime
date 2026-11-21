@@ -627,7 +627,7 @@ const AccountOverview: React.FC<{ user: UserProfile }> = ({ user }) => {
             <span>Change profile style</span>
           </button>
           <span className="pf-muted" style={{ fontSize: 13 }}>
-            Active: <strong>{activeDecoObj?.name || 'None'}</strong> Â· <strong>{activeBfxObj?.name || 'None'}</strong>
+            Active: <strong>{activeDecoObj?.name || 'None'}</strong> · <strong>{activeBfxObj?.name || 'None'}</strong>
           </span>
         </div>
       </div>

@@ -110,11 +110,6 @@ export function parseCorsOrigins(rawEnv?: string): string[] {
         // Ignore unparseable entries
       }
     }
-  } else {
-    // Default development fallback origins
-    allowed.add('http://localhost:5173');
-    allowed.add('http://localhost:4173');
-    allowed.add('http://localhost:3000');
   }
 
   return Array.from(allowed);

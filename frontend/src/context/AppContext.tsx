@@ -144,6 +144,7 @@ export const DEFAULT_SHORTCUTS: ShortcutBinding[] = [
   { id: 'vol_down', label: 'Volume down', group: 'volume', defaultKey: '↓', currentKey: '↓' },
   { id: 'mute', label: 'Mute / unmute', group: 'volume', defaultKey: 'M', currentKey: 'M' },
   { id: 'captions', label: 'Captions', group: 'subtitles', defaultKey: 'C', currentKey: 'C' },
+  { id: 'search', label: 'Search anime', group: 'navigation', defaultKey: '/ or Ctrl+K', currentKey: '/ or Ctrl+K', fixed: true },
   { id: 'fullscreen', label: 'Fullscreen', group: 'navigation', defaultKey: 'F', currentKey: 'F' },
   { id: 'pip', label: 'Miniplayer', group: 'navigation', defaultKey: 'I', currentKey: 'I' },
   { id: 'theater', label: 'Fill tab', group: 'navigation', defaultKey: 'T', currentKey: 'T' },
@@ -282,7 +283,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [shortcuts, setShortcuts] = useState<ShortcutBinding[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.shortcuts);
-      return raw ? (JSON.parse(raw) as ShortcutBinding[]) : DEFAULT_SHORTCUTS;
+      if (!raw) return DEFAULT_SHORTCUTS;
+      const parsed = JSON.parse(raw) as ShortcutBinding[];
+      if (!parsed.some((s) => s.id === 'search')) {
+        const searchDefault = DEFAULT_SHORTCUTS.find((s) => s.id === 'search');
+        if (searchDefault) return [searchDefault, ...parsed];
+      }
+      return parsed;
     } catch {
       return DEFAULT_SHORTCUTS;
     }
@@ -401,15 +408,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [recentSearches]);
 
-  // Global Ctrl+K / Cmd+K shortcut for search
+  // Global search shortcuts (/ and Ctrl+K / Cmd+K) and overlay controls
   useEffect(() => {
+    const isEditable = (el: EventTarget | null): boolean => {
+      if (!el || !(el instanceof HTMLElement)) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (el.getAttribute('role') === 'textbox') return true;
+      return false;
+    };
+
     const onKey = (e: KeyboardEvent) => {
+      // 1. Ctrl+K or Cmd+K shortcut
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setSearchOpen((prev) => !prev);
-      } else if (e.key === '?' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName ?? '')) {
+        return;
+      }
+
+      // 2. '/' Quick Search shortcut (must not trigger in input/textarea/select/contenteditable or with modifier keys)
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        if (!isEditable(e.target)) {
+          e.preventDefault();
+          setSearchOpen(true);
+          return;
+        }
+      }
+
+      // 3. '?' Shortcuts Help dialog
+      if (e.key === '?' && !isEditable(e.target)) {
         setShortcutsOpen(true);
-      } else if (e.key === 'Escape') {
+        return;
+      }
+
+      // 4. Escape closes search & modals
+      if (e.key === 'Escape') {
         setSearchOpen(false);
         setShortcutsOpen(false);
         setAuthOpen(false);
@@ -417,6 +451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRequestAnimeOpen(false);
       }
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);

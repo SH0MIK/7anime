@@ -32,8 +32,8 @@ interface SiteHeaderProps {
   scrolled: boolean;
   hidden: boolean;
   overArt: boolean;
-  pinnedOpen: boolean;
-  onTogglePin: () => void;
+  pinnedOpen?: boolean;
+  onTogglePin?: () => void;
   onMenuOpenChange?: (open: boolean) => void;
 }
 
@@ -41,7 +41,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   scrolled,
   hidden,
   overArt,
-  pinnedOpen,
+  pinnedOpen = false,
   onTogglePin,
   onMenuOpenChange,
 }) => {
@@ -158,9 +158,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
     { to: '/anime', label: t('nav.browse'), tier: 1 },
     { to: '/latest', label: t('nav.latest'), tier: 1 },
     { to: '/genres', label: t('nav.genres'), tier: 2 },
-    { to: '/manga', label: t('nav.manga'), tier: 1 },
     { to: '/library', label: t('nav.library'), tier: 1 },
-    { to: '/community', label: t('nav.community'), tier: 3 },
     { to: '/watch-together', label: t('nav.watchTogether'), tier: 3 },
     { to: '/anime?format=MOVIE', label: t('nav.movies'), tier: 3 },
   ];
@@ -233,7 +231,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
       >
         <Search size={15} />
         <span className="sitebar__search-label">{t('nav.searchPlaceholder')}</span>
-        <kbd className="sitebar__kbd">Ctrl K</kbd>
+        <kbd className="sitebar__kbd">/ or Ctrl + K</kbd>
       </button>
 
       <div className="sitebar__actions">
@@ -295,17 +293,6 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
             <span>{t('nav.signIn')}</span>
           </button>
         )}
-
-        <button
-          type="button"
-          className="sitebar__pin"
-          title="Keep the top bar open"
-          aria-label="Keep the top bar open"
-          aria-pressed={pinnedOpen}
-          onClick={onTogglePin}
-        >
-          <ChevronDown size={15} style={{ transform: pinnedOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }} />
-        </button>
       </div>
 
       {/* Options Popover / Mobile Bottom Sheet */}
