@@ -4,6 +4,7 @@ import { Captions, Mic, Search } from 'lucide-react';
 import { useApp } from '@/src/context/AppContext';
 import { AniListService } from '@/src/services/anilist';
 import { apiClient } from '@/src/services/apiClient';
+import { EpisodeThumbnail } from '@/src/components/EpisodeThumbnail';
 import { ErrorState, EmptyState } from '@/src/components/Skeletons';
 import type { AnimeTitle } from '@/src/types/anime';
 import type { RecentAiredEpisodeItem } from '@7anime/shared';
@@ -192,17 +193,16 @@ export const LatestPage: React.FC = () => {
               className="latest-ep-card"
             >
               <div className="latest-ep-thumb">
-                {ep.thumbnail ? (
-                  <img
-                    src={ep.thumbnail}
-                    alt={ep.title}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="latest-ep-fallback">
-                    <span>EP {ep.episode}</span>
-                  </div>
-                )}
+                <EpisodeThumbnail
+                  src={ep.thumbnail}
+                  alt={ep.title}
+                  episodeNumber={ep.episode}
+                  customFallback={(epNum) => (
+                    <div className="latest-ep-fallback">
+                      <span>EP {epNum}</span>
+                    </div>
+                  )}
+                />
                 <span className="latest-ep-badge-time">{ep.timeAgo}</span>
                 <span className="latest-ep-badge-num">EP {ep.episode}</span>
               </div>

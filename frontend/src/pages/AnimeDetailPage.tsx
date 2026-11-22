@@ -38,8 +38,9 @@ import { CinematicTrailerBackground } from '@/src/components/CinematicTrailerBac
 import { apiClient } from '@/src/services/apiClient';
 import { ArtworkResolver, ComprehensiveArtwork } from '@/src/services/artworkResolver';
 import { AniListService } from '@/src/services/anilist';
+import { EpisodeThumbnail } from '@/src/components/EpisodeThumbnail';
 import { ErrorState } from '@/src/components/Skeletons';
-import type { AnimeTitle, CommentItem, EpisodeItem } from '@/src/types/anime';
+import type { AnimeTitle, CommentItem, EpisodeItem, EpisodeKind } from '@/src/types/anime';
 
 type DetailTab = 'episodes' | 'related' | 'manga' | 'similar' | 'comments' | 'downloads';
 
@@ -191,20 +192,29 @@ export const AnimeDetailPage: React.FC = () => {
     if (!episodesData?.episodes || episodesData.episodes.length === 0) {
       return [];
     }
-    return episodesData.episodes.map((ep) => ({
-      number: ep.number,
-      title: ep.title || `Episode ${ep.number}`,
-      synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
-      aired: ep.airDate || `${anime?.year || ''}`,
-      duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
-      durationSec: ep.duration ? ep.duration * 60 : 1440,
-      hasSub: true,
-      hasDub: Boolean(ep.hasDub),
-      kind: ep.isFiller ? 'filler' : 'canon',
-      arc: 'Season 1',
-      season: 1,
-      thumbnail: ep.thumbnail || null,
-    }));
+    return episodesData.episodes.map((ep) => {
+      let kind: EpisodeKind = 'unknown';
+      if (ep.classification) {
+        kind = ep.classification.toLowerCase() as EpisodeKind;
+      } else if (ep.isFiller === true) {
+        kind = 'filler';
+      }
+      return {
+        number: ep.number,
+        title: ep.title || `Episode ${ep.number}`,
+        synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+        aired: ep.airDate || `${anime?.year || ''}`,
+        duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+        durationSec: ep.duration ? ep.duration * 60 : 1440,
+        hasSub: true,
+        hasDub: Boolean(ep.hasDub),
+        kind,
+        classificationSource: ep.classificationSource,
+        arc: 'Season 1',
+        season: 1,
+        thumbnail: ep.thumbnail || null,
+      };
+    });
   }, [episodesData, anime]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('episodes');
@@ -212,6 +222,7 @@ export const AnimeDetailPage: React.FC = () => {
   const [notifyOn, setNotifyOn] = useState(false);
   const [epSearch, setEpSearch] = useState('');
   const [arcFilter, setArcFilter] = useState('all');
+  const [classificationFilter, setClassificationFilter] = useState<'all' | 'canon' | 'mixed' | 'filler'>('all');
   const [sortOrder, setSortOrder] = useState<'oldest' | 'newest'>('oldest');
   const [hideFiller, setHideFiller] = useState(false);
   const [skipFiller, setSkipFiller] = useState(false);
@@ -257,9 +268,11 @@ export const AnimeDetailPage: React.FC = () => {
 
   useEffect(() => {
     setEpLimit(60);
-  }, [id, arcFilter, epSearch, hideFiller, audioFilter, epRange]);
+  }, [id, arcFilter, epSearch, classificationFilter, hideFiller, audioFilter, epRange]);
 
   const arcs = useMemo(() => Array.from(new Set(allEpisodes.map((e) => e.arc))), [allEpisodes]);
+  const canonCount = useMemo(() => allEpisodes.filter((e) => e.kind === 'canon').length, [allEpisodes]);
+  const mixedCount = useMemo(() => allEpisodes.filter((e) => e.kind === 'mixed').length, [allEpisodes]);
   const fillerCount = useMemo(() => allEpisodes.filter((e) => e.kind === 'filler').length, [allEpisodes]);
 
   const epChunks = useMemo(() => {
@@ -285,10 +298,11 @@ export const AnimeDetailPage: React.FC = () => {
       arc: arcFilter,
       query: epSearch,
       sortOrder,
+      classificationFilter,
       hideFiller,
       audioFilter,
     });
-  }, [allEpisodes, epRange, epChunks, arcFilter, epSearch, sortOrder, hideFiller, audioFilter]);
+  }, [allEpisodes, epRange, epChunks, arcFilter, epSearch, sortOrder, classificationFilter, hideFiller, audioFilter]);
 
   const similarTitles = liveRecommendations;
   const relatedTitles = liveRelations;
@@ -299,10 +313,11 @@ export const AnimeDetailPage: React.FC = () => {
     ? resolvedAnime.popularity.toLocaleString()
     : (anime ? (anime.id * 1420).toLocaleString() : '0');
 
-  const kindColor = (kind: 'canon' | 'mixed' | 'filler') => {
+  const kindColor = (kind: EpisodeItem['kind']) => {
     if (kind === 'canon') return '#4ade80';
     if (kind === 'mixed') return '#facc15';
-    return '#fb7185';
+    if (kind === 'filler') return '#fb7185';
+    return '#94a3b8';
   };
 
   // Resolve trailer key for background playback
@@ -388,7 +403,7 @@ export const AnimeDetailPage: React.FC = () => {
               )}
               <div>
                 <div className="detail-sidebar-row__label">Available Records</div>
-                <div className="detail-sidebar-row__val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div className="detail-sidebar-row__val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span>{allEpisodes.length.toLocaleString()}</span>
                   {episodesData?.completenessStatus === 'complete' ? (
                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80', fontWeight: 600 }}>
@@ -397,6 +412,14 @@ export const AnimeDetailPage: React.FC = () => {
                   ) : episodesData?.completenessStatus === 'partial' ? (
                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(250, 204, 21, 0.15)', color: '#facc15', fontWeight: 600 }}>
                       Partial
+                    </span>
+                  ) : episodesData?.completenessStatus === 'resolving' ? (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(96, 165, 250, 0.15)', color: '#60a5fa', fontWeight: 600 }}>
+                      Airing Soon
+                    </span>
+                  ) : episodesData?.completenessStatus === 'not_applicable' ? (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(192, 132, 252, 0.15)', color: '#c084fc', fontWeight: 600 }}>
+                      Feature / Movie
                     </span>
                   ) : null}
                 </div>
@@ -814,16 +837,49 @@ export const AnimeDetailPage: React.FC = () => {
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 11.5, color: 'rgb(var(--c-text2))', paddingTop: 2 }}>
-                    <span>
-                      <i style={{ color: '#4ade80' }}>●</i> Canon: Main story
-                    </span>
-                    <span>
-                      <i style={{ color: '#facc15' }}>●</i> Mixed: Canon + filler
-                    </span>
-                    <span>
-                      <i style={{ color: '#fb7185' }}>●</i> Filler: Anime-original
-                    </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11.5, color: 'rgb(var(--c-text2))', paddingTop: 2 }}>
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      aria-pressed={classificationFilter === 'all'}
+                      onClick={() => setClassificationFilter('all')}
+                      style={{ padding: '0 10px', height: 28 }}
+                    >
+                      <span>All</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      aria-pressed={classificationFilter === 'canon'}
+                      onClick={() => setClassificationFilter((p) => (p === 'canon' ? 'all' : 'canon'))}
+                      style={{ padding: '0 10px', height: 28 }}
+                    >
+                      <i style={{ color: '#4ade80' }}>●</i>
+                      <span>Canon: Main story</span>
+                      {canonCount > 0 && <span style={{ opacity: 0.65 }}>{canonCount}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      aria-pressed={classificationFilter === 'mixed'}
+                      onClick={() => setClassificationFilter((p) => (p === 'mixed' ? 'all' : 'mixed'))}
+                      style={{ padding: '0 10px', height: 28 }}
+                    >
+                      <i style={{ color: '#facc15' }}>●</i>
+                      <span>Mixed: Canon + filler</span>
+                      {mixedCount > 0 && <span style={{ opacity: 0.65 }}>{mixedCount}</span>}
+                    </button>
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      aria-pressed={classificationFilter === 'filler'}
+                      onClick={() => setClassificationFilter((p) => (p === 'filler' ? 'all' : 'filler'))}
+                      style={{ padding: '0 10px', height: 28 }}
+                    >
+                      <i style={{ color: '#fb7185' }}>●</i>
+                      <span>Filler: Anime-original</span>
+                      {fillerCount > 0 && <span style={{ opacity: 0.65 }}>{fillerCount}</span>}
+                    </button>
                   </div>
                 </div>
 
@@ -844,9 +900,19 @@ export const AnimeDetailPage: React.FC = () => {
                           Partial Catalogue ({episodesData.verifiedRecordsCount} of {episodesData.airedEpisodeCount} Aired)
                         </span>
                       )}
-                      {episodesData.completenessStatus === 'unavailable' && (
+                      {episodesData.completenessStatus === 'resolving' && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(96, 165, 250, 0.15)', color: '#60a5fa', fontWeight: 600 }}>
+                          Airing Schedule / Upcoming
+                        </span>
+                      )}
+                      {episodesData.completenessStatus === 'not_applicable' && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(192, 132, 252, 0.15)', color: '#c084fc', fontWeight: 600 }}>
+                          Single Installment Feature
+                        </span>
+                      )}
+                      {(episodesData.completenessStatus === 'metadata_unavailable' || episodesData.completenessStatus === 'unavailable') && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', fontWeight: 600 }}>
-                          Catalogue Unavailable
+                          Detailed Episode Listing Pending
                         </span>
                       )}
                     </div>
@@ -882,12 +948,16 @@ export const AnimeDetailPage: React.FC = () => {
 
                 {filteredEpisodes.length === 0 ? (
                   <div style={{ padding: '36px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.03)', borderRadius: 14, marginTop: 14 }}>
-                    <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>
+                    <p style={{ margin: 0, fontSize: 14, color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>
                       {epSearch
                         ? `No episodes matching "${epSearch}".`
-                        : anime?.episodeCount
-                          ? `Total verified episodes: ${anime.episodeCount}. Detailed individual episode catalogue is currently unavailable for this title.`
-                          : 'No episode records available.'}
+                        : episodesData?.completenessStatus === 'resolving'
+                          ? 'This title is scheduled or currently preparing its release. Episode listings and air schedules will appear as broadcast dates approach.'
+                          : episodesData?.completenessStatus === 'not_applicable'
+                            ? 'This release is a single installment or non-episodic feature.'
+                            : anime?.episodeCount
+                              ? `Total verified episodes: ${anime.episodeCount}. Detailed individual episode breakdown is pending metadata submission from upstream providers.`
+                              : 'No episode records available.'}
                     </p>
                   </div>
                 ) : gridView ? (
@@ -912,21 +982,19 @@ export const AnimeDetailPage: React.FC = () => {
                         className="detail-ep-card"
                       >
                         <div className="detail-ep-thumb">
-                          {!hideSpoilerThumbs && ep.thumbnail ? (
-                            <img
-                              src={ep.thumbnail}
-                              alt={ep.title}
-                              loading="lazy"
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <span className="cw-placeholder-number" style={{ fontSize: 28 }}>
-                              {String(ep.number).padStart(2, '0')}
-                            </span>
-                          )}
+                          <EpisodeThumbnail
+                            src={ep.thumbnail}
+                            alt={ep.title}
+                            episodeNumber={ep.number}
+                            hideThumbs={hideSpoilerThumbs}
+                            fontSize={28}
+                          />
                           <span className="detail-ep-badge-tl">
                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: kindColor(ep.kind) }} />
                             <span>Episode {ep.number}</span>
+                            {ep.kind !== 'unknown' && (
+                              <span style={{ fontSize: 10, opacity: 0.85, textTransform: 'capitalize', fontWeight: 600 }}>({ep.kind})</span>
+                            )}
                           </span>
                           {ep.hasDub && (
                             <span className="detail-ep-badge-bl">

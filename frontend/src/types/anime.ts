@@ -1,6 +1,6 @@
 export type RankSource = 'mal' | 'anilist';
 export type TimeframeKey = 'today' | 'week' | 'month' | 'all';
-export type EpisodeKind = 'canon' | 'mixed' | 'filler';
+export type EpisodeKind = 'canon' | 'mixed' | 'filler' | 'unknown';
 
 export type AnimeSortKey =
   | 'recommended'
@@ -77,6 +77,7 @@ export interface EpisodeItem {
   hasSub: boolean;
   hasDub: boolean;
   kind: EpisodeKind;
+  classificationSource?: string;
   arc: string;
   season: number;
   thumbnail: string | null;

@@ -179,6 +179,34 @@ test('filterEpisodeList filters filler and reverses sort order', () => {
       season: 1,
       thumbnail: null,
     },
+    {
+      number: 3,
+      title: 'Mixed Ep',
+      synopsis: '',
+      aired: '1999',
+      duration: '24:00',
+      durationSec: 1440,
+      hasSub: true,
+      hasDub: true,
+      kind: 'mixed',
+      arc: 'East Blue',
+      season: 1,
+      thumbnail: null,
+    },
+    {
+      number: 4,
+      title: 'Unknown Ep',
+      synopsis: '',
+      aired: '1999',
+      duration: '24:00',
+      durationSec: 1440,
+      hasSub: true,
+      hasDub: true,
+      kind: 'unknown',
+      arc: 'East Blue',
+      season: 1,
+      thumbnail: null,
+    },
   ];
 
   const cleanNewest = filterEpisodeList(eps, {
@@ -188,5 +216,35 @@ test('filterEpisodeList filters filler and reverses sort order', () => {
     hideFiller: true,
     audioFilter: 'all',
   });
-  assert.deepEqual(cleanNewest.map((e) => e.number), [1]);
+  assert.deepEqual(cleanNewest.map((e) => e.number), [4, 3, 1]);
+
+  const onlyCanon = filterEpisodeList(eps, {
+    arc: 'all',
+    query: '',
+    sortOrder: 'oldest',
+    classificationFilter: 'canon',
+    hideFiller: false,
+    audioFilter: 'all',
+  });
+  assert.deepEqual(onlyCanon.map((e) => e.number), [1]);
+
+  const onlyMixed = filterEpisodeList(eps, {
+    arc: 'all',
+    query: '',
+    sortOrder: 'oldest',
+    classificationFilter: 'mixed',
+    hideFiller: false,
+    audioFilter: 'all',
+  });
+  assert.deepEqual(onlyMixed.map((e) => e.number), [3]);
+
+  const onlyFiller = filterEpisodeList(eps, {
+    arc: 'all',
+    query: '',
+    sortOrder: 'oldest',
+    classificationFilter: 'filler',
+    hideFiller: false,
+    audioFilter: 'all',
+  });
+  assert.deepEqual(onlyFiller.map((e) => e.number), [2]);
 });

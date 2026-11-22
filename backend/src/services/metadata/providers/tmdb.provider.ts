@@ -458,11 +458,24 @@ export class TmdbProvider {
   }
 
   /**
-   * Fetches all relevant season episodes for a TV anime.
-   * - If expectedEpisodes is specified (e.g. Bleach = 366), and Season 1 has >= expectedEpisodes, returns Season 1.
-   * - If expectedEpisodes is null (ongoing e.g. One Piece) or spans across seasons, fetches all non-special seasons with continuous episode numbering.
+   * Intelligently resolves the correct season and episodes from TMDB for an anime.
+   * Handles:
+   * 1. Multi-season TV franchises (e.g. AoT Season 2/3, JJK Season 2, Demon Slayer arcs)
+   * 2. Continuous multi-season series (e.g. One Piece, Naruto, Black Clover, Bleach)
+   * 3. Single-season shows (e.g. Frieren, Death Note)
    */
-  public static async getAllTvEpisodes(tmdbId: number, expectedEpisodes?: number | null): Promise<TmdbEpisode[]> {
+  public static async resolveSeasonEpisodes(
+    tmdbId: number,
+    media: {
+      id: number;
+      title: { english?: string | null; romaji?: string | null };
+      synonyms?: string[];
+      seasonYear?: number | null;
+      startDate?: { year?: number; month?: number; day?: number };
+      episodes?: number | null;
+      status?: string;
+    }
+  ): Promise<TmdbEpisode[]> {
     const tv = await this.getTvDetails(tmdbId);
     if (!tv || !Array.isArray(tv.seasons)) {
       return this.getTvSeasonEpisodes(tmdbId, 1);
@@ -473,37 +486,175 @@ export class TmdbProvider {
       return this.getTvSeasonEpisodes(tmdbId, 1);
     }
 
-    // Single season check: if Season 1 contains all expected episodes (e.g. Bleach 366, Frieren 28)
-    if (expectedEpisodes && expectedEpisodes > 0) {
-      const s1 = validSeasons.find((s) => s.season_number === 1);
-      if (s1 && s1.episode_count >= expectedEpisodes) {
-        return this.getTvSeasonEpisodes(tmdbId, 1);
+    const titles = [
+      media.title?.english,
+      media.title?.romaji,
+      ...(media.synonyms || []),
+    ].filter(Boolean) as string[];
+
+    // 1. Detect target season number from title keywords
+    let targetSeasonNum: number | null = null;
+    for (const t of titles) {
+      const lower = t.toLowerCase();
+      const seasonMatch = lower.match(/(?:season|series|s)\s*(\d+)/i) ||
+        lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i) ||
+        lower.match(/\bpart\s*(\d+)/i) ||
+        lower.match(/\bcour\s*(\d+)/i);
+      if (seasonMatch) {
+        const parsed = parseInt(seasonMatch[1], 10);
+        if (parsed > 0) {
+          targetSeasonNum = parsed;
+          break;
+        }
+      }
+      if (/\b(?:the\s+)?final\s+season\b/i.test(lower)) {
+        // Find season named "Final Season" or the highest season number
+        const finalS = validSeasons.find((s) => /final/i.test(s.name));
+        targetSeasonNum = finalS ? finalS.season_number : validSeasons[validSeasons.length - 1].season_number;
+        break;
+      }
+      if (/\bseason\s+ii\b|\b2nd\s+season\b/i.test(lower)) {
+        targetSeasonNum = 2;
+        break;
+      }
+      if (/\bseason\s+iii\b|\b3rd\s+season\b/i.test(lower)) {
+        targetSeasonNum = 3;
+        break;
+      }
+      if (/\bseason\s+iv\b|\b4th\s+season\b/i.test(lower)) {
+        targetSeasonNum = 4;
+        break;
       }
     }
 
-    // Multi-season TV anime (like One Piece with 23 seasons, or multi-cour continuous series)
-    // Fetch all non-special seasons in bounded concurrent batches
-    const allEpisodes: TmdbEpisode[] = [];
-    const batchSize = 6;
-    for (let i = 0; i < validSeasons.length; i += batchSize) {
-      const batch = validSeasons.slice(i, i + batchSize);
-      const batchResults = await Promise.all(
-        batch.map((s) => this.getTvSeasonEpisodes(tmdbId, s.season_number))
+    // 2. Named arc check in TMDB season names (e.g. Demon Slayer, Bleach)
+    if (!targetSeasonNum) {
+      for (const season of validSeasons) {
+        const sNameLower = season.name.toLowerCase();
+        if (sNameLower === 'season 1' || sNameLower === 'specials') continue;
+        for (const t of titles) {
+          const tLower = t.toLowerCase();
+          if (tLower.includes(sNameLower) || sNameLower.includes(tLower)) {
+            targetSeasonNum = season.season_number;
+            break;
+          }
+        }
+        if (targetSeasonNum) break;
+      }
+    }
+
+    // 3. Air Date alignment check (Only for standalone seasons/sequels, not continuous multi-season franchises)
+    const s1 = validSeasons.find((s) => s.season_number === 1);
+    const isContinuousFranchise =
+      (!media.episodes && validSeasons.length > 1) ||
+      (media.episodes != null && media.episodes > (s1?.episode_count || 0));
+
+    if (!targetSeasonNum && !isContinuousFranchise && media.startDate?.year) {
+      const airYear = media.startDate.year;
+      // Filter seasons released in the same year
+      const matchingYearSeasons = validSeasons.filter((s) => s.air_date && s.air_date.startsWith(String(airYear)));
+      if (matchingYearSeasons.length === 1) {
+        targetSeasonNum = matchingYearSeasons[0].season_number;
+      } else if (matchingYearSeasons.length > 1 && media.episodes) {
+        const exactCountSeason = matchingYearSeasons.find((s) => s.episode_count === media.episodes);
+        if (exactCountSeason) {
+          targetSeasonNum = exactCountSeason.season_number;
+        }
+      }
+    }
+
+    // 4. If a specific season was identified and exists in validSeasons, return its episodes
+    if (targetSeasonNum) {
+      const matched = validSeasons.find((s) => s.season_number === targetSeasonNum);
+      if (matched) {
+        const seasonEps = await this.getTvSeasonEpisodes(tmdbId, targetSeasonNum);
+        if (seasonEps.length > 0) {
+          return seasonEps;
+        }
+      }
+
+      // If targetSeasonNum > 1 was requested, but TMDB only lists Season 1:
+      // Check if Season 1 contains episodes from that sequel airing year (e.g. JJK S2 on TMDB)
+      if (targetSeasonNum > 1 && media.startDate?.year) {
+        const s1Eps = await this.getTvSeasonEpisodes(tmdbId, 1);
+        const yearStr = String(media.startDate.year);
+        const matchingYearEps = s1Eps.filter((e) => e.air_date && e.air_date.startsWith(yearStr));
+        if (matchingYearEps.length > 0) {
+          // Renumber sequentially 1..N for this season
+          return matchingYearEps.map((e, idx) => ({
+            ...e,
+            episode_number: idx + 1,
+          }));
+        }
+      }
+      return [];
+    }
+
+    // Only 1 season exists on TMDB and no specific sequel season was requested
+    if (validSeasons.length === 1) {
+      return this.getTvSeasonEpisodes(tmdbId, validSeasons[0].season_number);
+    }
+
+    // 5. Continuous multi-season series check:
+    // If the expected count exceeds Season 1 (e.g. One Piece, Naruto, Black Clover = 170 eps)
+    // or if the anime has no explicit season label and expected count is large/null
+    const sumSeasonEpisodes = validSeasons.reduce((acc, s) => acc + s.episode_count, 0);
+
+    if (
+      (!media.episodes && validSeasons.length > 1) ||
+      (media.episodes && media.episodes > (s1?.episode_count || 0)) ||
+      (media.episodes && Math.abs(media.episodes - sumSeasonEpisodes) <= 5)
+    ) {
+      // Long-running continuous TV series: fetch all seasons in parallel and maintain continuous numbering
+      const allEpisodes: TmdbEpisode[] = [];
+      let continuousCounter = 1;
+
+      const seasonResults = await Promise.all(
+        validSeasons.map((season) => this.getTvSeasonEpisodes(tmdbId, season.season_number))
       );
-      for (const seasonEps of batchResults) {
-        allEpisodes.push(...seasonEps);
+
+      for (let i = 0; i < validSeasons.length; i++) {
+        const season = validSeasons[i];
+        const seasonEps = seasonResults[i];
+        const startsAtOne = seasonEps.length > 0 && seasonEps[0].episode_number === 1 && season.season_number > 1;
+
+        for (const ep of seasonEps) {
+          if (startsAtOne) {
+            allEpisodes.push({
+              ...ep,
+              episode_number: continuousCounter++,
+            });
+          } else {
+            allEpisodes.push(ep);
+            continuousCounter = Math.max(continuousCounter, (ep.episode_number || 0) + 1);
+          }
+        }
       }
+
+      // Deduplicate by episode_number
+      const epMap = new Map<number, TmdbEpisode>();
+      for (const ep of allEpisodes) {
+        if (ep.episode_number && !epMap.has(ep.episode_number)) {
+          epMap.set(ep.episode_number, ep);
+        }
+      }
+
+      return Array.from(epMap.values()).sort((a, b) => a.episode_number - b.episode_number);
     }
 
-    // Deduplicate by episode_number
-    const epMap = new Map<number, TmdbEpisode>();
-    for (const ep of allEpisodes) {
-      if (ep.episode_number && !epMap.has(ep.episode_number)) {
-        epMap.set(ep.episode_number, ep);
-      }
-    }
+    // Default: Return Season 1 episodes
+    return this.getTvSeasonEpisodes(tmdbId, 1);
+  }
 
-    return Array.from(epMap.values()).sort((a, b) => a.episode_number - b.episode_number);
+  /**
+   * Fetches all relevant season episodes for a TV anime.
+   */
+  public static async getAllTvEpisodes(tmdbId: number, expectedEpisodes?: number | null): Promise<TmdbEpisode[]> {
+    return this.resolveSeasonEpisodes(tmdbId, {
+      id: 0,
+      title: {},
+      episodes: expectedEpisodes,
+    });
   }
 
   // --- ARTWORK EXTRACTION HELPERS ---

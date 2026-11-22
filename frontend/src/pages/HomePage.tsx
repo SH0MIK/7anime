@@ -30,6 +30,7 @@ import {
 import { AniListService, type HomepageFeedData } from '@/src/services/anilist';
 import { SpotlightSkeleton, RailSkeleton, ErrorState } from '@/src/components/Skeletons';
 import { apiClient } from '@/src/services/apiClient';
+import { EpisodeThumbnail } from '@/src/components/EpisodeThumbnail';
 import type { RecentAiredEpisodeItem } from '@7anime/shared';
 
 const TIMEFRAMES: { key: TimeframeKey; labelKey: string }[] = [
@@ -867,15 +868,14 @@ export const HomePage: React.FC = () => {
                 className="cw"
               >
                 <div className="cw-thumb">
-                  {contentPrefs.showEpisodeThumbsOnHome && ep.thumbnail ? (
-                    <img src={ep.thumbnail} alt={ep.title} loading="lazy" />
-                  ) : (
-                    <div className="cw-placeholder">
-                      <span className="cw-placeholder-number">
-                        {String(ep.episode).padStart(2, '0')}
-                      </span>
-                    </div>
-                  )}
+                  <EpisodeThumbnail
+                    src={ep.thumbnail}
+                    alt={ep.title}
+                    episodeNumber={ep.episode}
+                    hideThumbs={!contentPrefs.showEpisodeThumbsOnHome}
+                    wrapInPlaceholderDiv
+                    fontSize={24}
+                  />
                   <div className="cw-shade" />
                   <div className="cw-badges-tl">
                     {ep.hasSub && (
@@ -922,15 +922,14 @@ export const HomePage: React.FC = () => {
                 className="cw"
               >
                 <div className="cw-thumb">
-                  {contentPrefs.showEpisodeThumbsOnHome && slot.thumbnail ? (
-                    <img src={slot.thumbnail} alt={slot.anime.title} loading="lazy" />
-                  ) : (
-                    <div className="cw-placeholder">
-                      <span className="cw-placeholder-number">
-                        {String(slot.episode).padStart(2, '0')}
-                      </span>
-                    </div>
-                  )}
+                  <EpisodeThumbnail
+                    src={slot.thumbnail}
+                    alt={slot.anime.title}
+                    episodeNumber={slot.episode}
+                    hideThumbs={!contentPrefs.showEpisodeThumbsOnHome}
+                    wrapInPlaceholderDiv
+                    fontSize={24}
+                  />
                   <div className="cw-shade" />
                   <div className="cw-badges-tl">
                     {slot.hasSub && (

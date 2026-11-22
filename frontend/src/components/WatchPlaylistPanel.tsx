@@ -3,17 +3,22 @@ import { ArrowDownUp, BookOpen, ChevronDown, Eye, EyeOff, Grid, Layers, List, Mi
 import type { EpisodeItem } from '@/src/types/anime';
 import { filterEpisodeList } from '@/src/utils/catalogFilter';
 import { useApp } from '@/src/context/AppContext';
+import { EpisodeThumbnail } from './EpisodeThumbnail';
 
 interface WatchPlaylistPanelProps {
   episodes: EpisodeItem[];
   currentEp: number;
   onSelectEpisode: (epNumber: number) => void;
+  skipFiller?: boolean;
+  onToggleSkipFiller?: () => void;
 }
 
 export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
   episodes,
   currentEp,
   onSelectEpisode,
+  skipFiller: skipFillerProp,
+  onToggleSkipFiller,
 }) => {
   const { t } = useApp();
   const [search, setSearch] = useState('');
@@ -21,7 +26,10 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
   const [selectedSeason, setSelectedSeason] = useState('all');
   const [oldestFirst, setOldestFirst] = useState(true);
   const [hideFiller, setHideFiller] = useState(false);
-  const [skipFiller, setSkipFiller] = useState(false);
+  const [internalSkipFiller, setInternalSkipFiller] = useState(false);
+  const skipFiller = skipFillerProp !== undefined ? skipFillerProp : internalSkipFiller;
+  const handleToggleSkipFiller = onToggleSkipFiller || (() => setInternalSkipFiller((p) => !p));
+  const [classificationFilter, setClassificationFilter] = useState<'all' | 'canon' | 'mixed' | 'filler'>('all');
   const [subOnly, setSubOnly] = useState(false);
   const [dubOnly, setDubOnly] = useState(false);
   const [hideThumbs, setHideThumbs] = useState(false);
@@ -35,7 +43,7 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
 
   useEffect(() => {
     setEpLimit(Math.max(60, currentEp + 20));
-  }, [search, selectedArc, selectedSeason, hideFiller, subOnly, dubOnly, oldestFirst, selectedChunk]);
+  }, [search, selectedArc, selectedSeason, hideFiller, classificationFilter, subOnly, dubOnly, oldestFirst, selectedChunk]);
 
   const epChunks = useMemo(() => {
     if (episodes.length <= 100) return [];
@@ -58,6 +66,8 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
     return ['All arcs', ...uniq];
   }, [episodes]);
 
+  const canonCount = useMemo(() => episodes.filter((e) => e.kind === 'canon').length, [episodes]);
+  const mixedCount = useMemo(() => episodes.filter((e) => e.kind === 'mixed').length, [episodes]);
   const fillerCount = useMemo(() => episodes.filter((e) => e.kind === 'filler').length, [episodes]);
   const subCount = useMemo(() => episodes.filter((e) => e.hasSub).length, [episodes]);
   const dubCount = useMemo(() => episodes.filter((e) => e.hasDub).length, [episodes]);
@@ -74,6 +84,7 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
     list = filterEpisodeList(list, {
       query: search,
       arc: selectedArc === 'All arcs' ? 'all' : selectedArc,
+      classificationFilter,
       hideFiller,
       audioFilter,
       sortOrder: oldestFirst ? 'oldest' : 'newest',
@@ -82,12 +93,13 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
       list = list.filter((e) => e.season === Number(selectedSeason));
     }
     return list;
-  }, [episodes, search, selectedArc, hideFiller, subOnly, dubOnly, oldestFirst, selectedSeason, selectedChunk, epChunks]);
+  }, [episodes, search, selectedArc, classificationFilter, hideFiller, subOnly, dubOnly, oldestFirst, selectedSeason, selectedChunk, epChunks]);
 
   const kindColor = (kind: EpisodeItem['kind']) => {
     if (kind === 'canon') return '#4ade80';
     if (kind === 'mixed') return '#facc15';
-    return '#fb7185';
+    if (kind === 'filler') return '#fb7185';
+    return '#94a3b8';
   };
 
   return (
@@ -186,7 +198,7 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
           type="button"
           className="watch-pill"
           aria-pressed={skipFiller}
-          onClick={() => setSkipFiller((p) => !p)}
+          onClick={handleToggleSkipFiller}
         >
           <span>{t('detail.skipFiller')}</span>
         </button>
@@ -255,16 +267,34 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
         }}
       >
         <span>{filtered.length} episodes</span>
-        <span style={{ display: 'inline-flex', gap: 10 }}>
-          <span>
-            <i style={{ color: '#4ade80' }}>●</i> Canon
-          </span>
-          <span>
-            <i style={{ color: '#facc15' }}>●</i> Mixed
-          </span>
-          <span>
-            <i style={{ color: '#fb7185' }}>●</i> Filler
-          </span>
+        <span style={{ display: 'inline-flex', gap: 6 }}>
+          <button
+            type="button"
+            className="watch-pill"
+            aria-pressed={classificationFilter === 'canon'}
+            onClick={() => setClassificationFilter((p) => (p === 'canon' ? 'all' : 'canon'))}
+            style={{ height: 22, padding: '0 6px', fontSize: 11 }}
+          >
+            <i style={{ color: '#4ade80' }}>●</i> Canon {canonCount > 0 && <span style={{ opacity: 0.65 }}>{canonCount}</span>}
+          </button>
+          <button
+            type="button"
+            className="watch-pill"
+            aria-pressed={classificationFilter === 'mixed'}
+            onClick={() => setClassificationFilter((p) => (p === 'mixed' ? 'all' : 'mixed'))}
+            style={{ height: 22, padding: '0 6px', fontSize: 11 }}
+          >
+            <i style={{ color: '#facc15' }}>●</i> Mixed {mixedCount > 0 && <span style={{ opacity: 0.65 }}>{mixedCount}</span>}
+          </button>
+          <button
+            type="button"
+            className="watch-pill"
+            aria-pressed={classificationFilter === 'filler'}
+            onClick={() => setClassificationFilter((p) => (p === 'filler' ? 'all' : 'filler'))}
+            style={{ height: 22, padding: '0 6px', fontSize: 11 }}
+          >
+            <i style={{ color: '#fb7185' }}>●</i> Filler {fillerCount > 0 && <span style={{ opacity: 0.65 }}>{fillerCount}</span>}
+          </button>
         </span>
       </div>
 
@@ -313,15 +343,14 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
               >
                 {!hideThumbs && (
                   <div className="watch-ep-row__thumb">
-                    {ep.thumbnail ? (
-                      <img src={ep.thumbnail} alt="" loading={epIdx < 10 ? 'eager' : 'lazy'} />
-                    ) : (
-                      <div className="cw-placeholder">
-                        <span className="cw-placeholder-number" style={{ fontSize: 22 }}>
-                          {ep.number}
-                        </span>
-                      </div>
-                    )}
+                    <EpisodeThumbnail
+                      src={ep.thumbnail}
+                      episodeNumber={ep.number}
+                      hideThumbs={hideThumbs}
+                      loading={epIdx < 10 ? 'eager' : 'lazy'}
+                      wrapInPlaceholderDiv
+                      fontSize={22}
+                    />
                     <span className="watch-ep-row__epbadge">
                       <span
                         style={{

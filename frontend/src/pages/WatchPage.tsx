@@ -33,7 +33,7 @@ import { AniListService } from '@/src/services/anilist';
 import { apiClient } from '@/src/services/apiClient';
 import { ArtworkResolver } from '@/src/services/artworkResolver';
 import { ErrorState } from '@/src/components/Skeletons';
-import type { AnimeTitle, EpisodeItem } from '@/src/types/anime';
+import type { AnimeTitle, EpisodeItem, EpisodeKind } from '@/src/types/anime';
 import type { AnimeEpisodeCatalogue } from '@7anime/shared';
 
 function extractAniListId(rawParam?: string): number | null {
@@ -177,20 +177,29 @@ export const WatchPage: React.FC = () => {
     if (!episodesData?.episodes || episodesData.episodes.length === 0) {
       return [];
     }
-    return episodesData.episodes.map((ep) => ({
-      number: ep.number,
-      title: ep.title || `Episode ${ep.number}`,
-      synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
-      aired: ep.airDate || `${anime?.year || ''}`,
-      duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
-      durationSec: ep.duration ? ep.duration * 60 : 1440,
-      hasSub: true,
-      hasDub: Boolean(ep.hasDub),
-      kind: ep.isFiller ? 'filler' : 'canon',
-      arc: 'Season 1',
-      season: 1,
-      thumbnail: ep.thumbnail || null,
-    }));
+    return episodesData.episodes.map((ep) => {
+      let kind: EpisodeKind = 'unknown';
+      if (ep.classification) {
+        kind = ep.classification.toLowerCase() as EpisodeKind;
+      } else if (ep.isFiller === true) {
+        kind = 'filler';
+      }
+      return {
+        number: ep.number,
+        title: ep.title || `Episode ${ep.number}`,
+        synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+        aired: ep.airDate || `${anime?.year || ''}`,
+        duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+        durationSec: ep.duration ? ep.duration * 60 : 1440,
+        hasSub: true,
+        hasDub: Boolean(ep.hasDub),
+        kind,
+        classificationSource: ep.classificationSource,
+        arc: 'Season 1',
+        season: 1,
+        thumbnail: ep.thumbnail || null,
+      };
+    });
   }, [episodesData, anime]);
 
   const rawEp = epParam ?? searchParams.get('ep') ?? '1';
@@ -205,7 +214,7 @@ export const WatchPage: React.FC = () => {
       durationSec: 1440,
       hasSub: true,
       hasDub: false,
-      kind: 'canon',
+      kind: 'unknown',
       arc: 'Main Arc',
       season: 1,
       thumbnail: null,
@@ -213,6 +222,7 @@ export const WatchPage: React.FC = () => {
     [episodes, epNum]
   );
 
+  const [skipFiller, setSkipFiller] = useState(false);
   const [audioMode, setAudioMode] = useState<'sub' | 'dub'>('sub');
   const [server, setServer] = useState<'default' | 'beta'>(playerPrefs.defaultServer);
   const [backupNoticeDismissed, setBackupNoticeDismissed] = useState(false);
@@ -251,8 +261,25 @@ export const WatchPage: React.FC = () => {
     if (anime) navigate(`/anime/${anime.routeId}?ep=${n}`);
   };
 
-  const hasPrev = currentEpisode.number > 1;
-  const hasNext = currentEpisode.number < episodes.length;
+  const getNextEpisodeNumber = (currentNum: number, forward: boolean = true) => {
+    if (!skipFiller) {
+      return forward ? currentNum + 1 : currentNum - 1;
+    }
+    if (forward) {
+      const remaining = episodes.filter((e) => e.number > currentNum);
+      const nextEligible = remaining.find((e) => e.kind !== 'filler');
+      return nextEligible ? nextEligible.number : currentNum + 1;
+    } else {
+      const previous = episodes.filter((e) => e.number < currentNum).sort((a, b) => b.number - a.number);
+      const prevEligible = previous.find((e) => e.kind !== 'filler');
+      return prevEligible ? prevEligible.number : currentNum - 1;
+    }
+  };
+
+  const nextTargetEp = getNextEpisodeNumber(currentEpisode.number, true);
+  const prevTargetEp = getNextEpisodeNumber(currentEpisode.number, false);
+  const hasNext = episodes.some((e) => e.number === nextTargetEp);
+  const hasPrev = episodes.some((e) => e.number === prevTargetEp);
 
   if (isLoading) {
     return (
@@ -297,8 +324,8 @@ export const WatchPage: React.FC = () => {
             server={server}
             hasPrev={hasPrev}
             hasNext={hasNext}
-            onPrevEpisode={() => hasPrev && goToEpisode(currentEpisode.number - 1)}
-            onNextEpisode={() => hasNext && goToEpisode(currentEpisode.number + 1)}
+            onPrevEpisode={() => hasPrev && goToEpisode(prevTargetEp)}
+            onNextEpisode={() => hasNext && goToEpisode(nextTargetEp)}
           />
 
           {/* Player Controls Toolbar */}
@@ -399,7 +426,7 @@ export const WatchPage: React.FC = () => {
                 disabled={!hasPrev}
                 aria-label="Previous episode"
                 title="Previous episode"
-                onClick={() => hasPrev && goToEpisode(currentEpisode.number - 1)}
+                onClick={() => hasPrev && goToEpisode(prevTargetEp)}
                 style={{ opacity: hasPrev ? 1 : 0.4 }}
               >
                 <ChevronLeft size={16} />
@@ -410,7 +437,7 @@ export const WatchPage: React.FC = () => {
                 disabled={!hasNext}
                 aria-label="Next episode"
                 title="Next episode"
-                onClick={() => hasNext && goToEpisode(currentEpisode.number + 1)}
+                onClick={() => hasNext && goToEpisode(nextTargetEp)}
                 style={{ opacity: hasNext ? 1 : 0.4 }}
               >
                 <ChevronRight size={16} />
@@ -551,6 +578,8 @@ export const WatchPage: React.FC = () => {
                 episodes={episodes}
                 currentEp={currentEpisode.number}
                 onSelectEpisode={goToEpisode}
+                skipFiller={skipFiller}
+                onToggleSkipFiller={() => setSkipFiller((p) => !p)}
               />
               <WatchSidebarExtras relatedAnime={relatedAnime} relatedManga={relatedManga} />
             </div>
@@ -563,6 +592,8 @@ export const WatchPage: React.FC = () => {
               episodes={episodes}
               currentEp={currentEpisode.number}
               onSelectEpisode={goToEpisode}
+              skipFiller={skipFiller}
+              onToggleSkipFiller={() => setSkipFiller((p) => !p)}
             />
             <WatchSidebarExtras relatedAnime={relatedAnime} relatedManga={relatedManga} />
           </div>

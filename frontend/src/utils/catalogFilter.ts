@@ -169,6 +169,7 @@ export interface EpisodeFilterOpts {
   arc: string;
   query: string;
   sortOrder: 'oldest' | 'newest';
+  classificationFilter?: 'all' | 'canon' | 'mixed' | 'filler';
   hideFiller: boolean;
   audioFilter: 'all' | 'sub' | 'dub';
 }
@@ -180,6 +181,9 @@ export function filterEpisodeList(
   const q = opts.query.trim().toLowerCase();
   const list = episodes.filter((ep) => {
     if (opts.arc !== 'all' && ep.arc !== opts.arc) return false;
+    if (opts.classificationFilter && opts.classificationFilter !== 'all') {
+      if (ep.kind !== opts.classificationFilter) return false;
+    }
     if (opts.hideFiller && ep.kind === 'filler') return false;
     if (opts.audioFilter === 'sub' && !ep.hasSub) return false;
     if (opts.audioFilter === 'dub' && !ep.hasDub) return false;

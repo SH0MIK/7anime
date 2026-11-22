@@ -96,6 +96,7 @@ export interface AnimeSearchResult {
     page: number;
     hasMore: boolean;
 }
+export type EpisodeClassification = 'CANON' | 'MIXED' | 'FILLER' | 'UNKNOWN';
 export interface VerifiedEpisode {
     number: number;
     title?: string;
@@ -104,11 +105,13 @@ export interface VerifiedEpisode {
     duration?: number;
     thumbnail?: string;
     isFiller?: boolean;
+    classification?: EpisodeClassification;
+    classificationSource?: string;
     hasSub?: boolean;
     hasDub?: boolean;
-    source: 'tmdb' | 'anilist' | 'official';
+    source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | string;
 }
-export type CatalogueCompleteness = 'complete' | 'partial' | 'unavailable';
+export type CatalogueCompleteness = 'complete' | 'partial' | 'resolving' | 'provider_temporarily_unavailable' | 'mapping_required' | 'metadata_unavailable' | 'not_applicable' | 'unavailable';
 export interface AnimeEpisodeCatalogue {
     anilistId: number;
     totalAnnouncedEpisodes: number | null;
