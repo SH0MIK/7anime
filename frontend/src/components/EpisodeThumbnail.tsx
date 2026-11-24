@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { imageTracker } from '@/src/services/cache';
 
 export interface EpisodeThumbnailProps {
   src?: string | null;
@@ -33,8 +34,10 @@ export const EpisodeThumbnail: React.FC<EpisodeThumbnailProps> = ({
     setHasError(false);
   }
 
-  // If hidden, missing src, or failed to load, display the designed episode-number badge
-  if (hideThumbs || !src || hasError) {
+  // If hidden, missing src, or confirmed broken in cache, display designed badge immediately
+  const isBroken = Boolean(src && imageTracker.isBroken(src));
+
+  if (hideThumbs || !src || hasError || isBroken) {
     if (customFallback) {
       return <>{customFallback(episodeNumber)}</>;
     }
@@ -51,7 +54,10 @@ export const EpisodeThumbnail: React.FC<EpisodeThumbnailProps> = ({
       src={src}
       alt={alt}
       loading={loading}
-      onError={() => setHasError(true)}
+      onError={() => {
+        if (src) imageTracker.markBroken(src);
+        setHasError(true);
+      }}
       className={className}
       style={{
         width: '100%',

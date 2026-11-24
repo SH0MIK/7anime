@@ -13,11 +13,12 @@ import type { LocaleEntry, LocaleTag, TextDir } from '@/src/types/i18n';
 import type {
   CaptionSettings,
   ContentPreferences,
+  DiscordPresencePreferences,
   PlayerPreferences,
   PrivacyPreferences,
-  ShortcutBinding,
   ThemePreferences,
 } from '@/src/types/settings';
+import { discordPresenceService } from '@/src/services/discordPresenceService';
 import type { AuthProvider, UserProfile, WatchStatus } from '@/src/types/user';
 import type { ChatMessage, ForumCategory, ForumThread, WatchRoom } from '@/src/types/community';
 import {
@@ -47,7 +48,7 @@ const STORAGE_KEYS = {
   player: '7anime:player:v1',
   captions: '7anime:captions:v1',
   privacy: '7anime:privacy:v1',
-  shortcuts: '7anime:shortcuts:v1',
+  discord: '7anime:discord:v1',
   library: '7anime:library:v1',
   user: '7anime:user:v1',
   recentSearches: '7anime:recent-searches:v1',
@@ -128,33 +129,12 @@ export const DEFAULT_PRIVACY_PREFS: PrivacyPreferences = {
   playbackDiagnostics: false,
 };
 
-export const DEFAULT_SHORTCUTS: ShortcutBinding[] = [
-  { id: 'play_pause', label: 'Play / pause', group: 'playback', defaultKey: 'K', currentKey: 'K', altKeys: ['Space'] },
-  { id: 'autoplay', label: 'Toggle autoplay', group: 'playback', defaultKey: 'A', currentKey: 'A' },
-  { id: 'loop', label: 'Loop', group: 'playback', defaultKey: 'O', currentKey: 'O' },
-  { id: 'speed', label: 'Decrease / increase playback speed', group: 'playback', defaultKey: '< / >', currentKey: '< / >', fixed: true },
-  { id: 'back_10', label: 'Back 10 seconds', group: 'seeking', defaultKey: 'J', currentKey: 'J' },
-  { id: 'fwd_10', label: 'Forward 10 seconds', group: 'seeking', defaultKey: 'L', currentKey: 'L' },
-  { id: 'rem_time', label: 'Toggle remaining time', group: 'seeking', defaultKey: 'R', currentKey: 'R' },
-  { id: 'arrow_seek', label: 'Seek backward / forward 5 seconds', group: 'seeking', defaultKey: '← / →', currentKey: '← / →', fixed: true },
-  { id: 'pct_jump', label: 'Jump to 0–90%', group: 'seeking', defaultKey: '0–9', currentKey: '0–9', fixed: true },
-  { id: 'end_jump', label: 'Jump to beginning / end', group: 'seeking', defaultKey: 'HOME / END', currentKey: 'HOME / END', fixed: true },
-  { id: 'frame_step', label: 'Previous / next frame while paused', group: 'seeking', defaultKey: ', / .', currentKey: ', / .', fixed: true },
-  { id: 'vol_up', label: 'Volume up', group: 'volume', defaultKey: '↑', currentKey: '↑' },
-  { id: 'vol_down', label: 'Volume down', group: 'volume', defaultKey: '↓', currentKey: '↓' },
-  { id: 'mute', label: 'Mute / unmute', group: 'volume', defaultKey: 'M', currentKey: 'M' },
-  { id: 'captions', label: 'Captions', group: 'subtitles', defaultKey: 'C', currentKey: 'C' },
-  { id: 'search', label: 'Search anime', group: 'navigation', defaultKey: '/ or Ctrl+K', currentKey: '/ or Ctrl+K', fixed: true },
-  { id: 'fullscreen', label: 'Fullscreen', group: 'navigation', defaultKey: 'F', currentKey: 'F' },
-  { id: 'pip', label: 'Miniplayer', group: 'navigation', defaultKey: 'I', currentKey: 'I' },
-  { id: 'theater', label: 'Fill tab', group: 'navigation', defaultKey: 'T', currentKey: 'T' },
-  { id: 'prev_ep', label: 'Previous episode', group: 'navigation', defaultKey: 'P', currentKey: 'P' },
-  { id: 'next_ep', label: 'Next episode', group: 'navigation', defaultKey: 'N', currentKey: 'N' },
-  { id: 'cast', label: 'Cast', group: 'navigation', defaultKey: 'S', currentKey: 'S' },
-  { id: 'open_settings', label: 'Open settings', group: 'navigation', defaultKey: 'G', currentKey: 'G' },
-  { id: 'ambient', label: 'Ambient mode', group: 'navigation', defaultKey: 'B', currentKey: 'B' },
-  { id: 'escape', label: 'Exit fullscreen / close menu', group: 'navigation', defaultKey: 'Esc', currentKey: 'Esc', fixed: true },
-];
+export const DEFAULT_DISCORD_PREFS: DiscordPresencePreferences = {
+  enabled: false,
+  autoShare: true,
+  hideTitle: false,
+  hideEpisode: false,
+};
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -192,9 +172,8 @@ interface AppContextValue {
   setCaptionPrefs: React.Dispatch<React.SetStateAction<CaptionSettings>>;
   privacyPrefs: PrivacyPreferences;
   setPrivacyPrefs: React.Dispatch<React.SetStateAction<PrivacyPreferences>>;
-  shortcuts: ShortcutBinding[];
-  updateShortcut: (id: string, key: string) => void;
-  resetShortcuts: () => void;
+  discordPrefs: DiscordPresencePreferences;
+  setDiscordPrefs: React.Dispatch<React.SetStateAction<DiscordPresencePreferences>>;
   resetPlayerPrefs: () => void;
 
   // Auth & Profile
@@ -211,7 +190,6 @@ interface AppContextValue {
   addLibraryFolder: (name: string, initialRouteId?: string) => void;
   logWatchProgress: (routeId: string, episode: number, positionSec: number, durationSec: number, audioMode: 'sub' | 'dub') => void;
   toggleLikeAnime: (routeId: string) => void;
-  toggleMangaBookmark: (mangaId: string) => void;
   clearHistory: () => void;
   exportStorageJson: () => string;
   importBackupJson: (raw: string) => boolean;
@@ -239,8 +217,6 @@ interface AppContextValue {
   setChatOpen: (v: boolean) => void;
   authOpen: boolean;
   setAuthOpen: (v: boolean) => void;
-  shortcutsOpen: boolean;
-  setShortcutsOpen: (v: boolean) => void;
   reportOpen: boolean;
   setReportOpen: (v: boolean) => void;
   requestAnimeOpen: boolean;
@@ -279,21 +255,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [privacyPrefs, setPrivacyPrefs] = useState<PrivacyPreferences>(() =>
     readJson(STORAGE_KEYS.privacy, DEFAULT_PRIVACY_PREFS)
   );
+  const [discordPrefs, setDiscordPrefs] = useState<DiscordPresencePreferences>(() =>
+    readJson(STORAGE_KEYS.discord, DEFAULT_DISCORD_PREFS)
+  );
 
-  const [shortcuts, setShortcuts] = useState<ShortcutBinding[]>(() => {
+  useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.shortcuts);
-      if (!raw) return DEFAULT_SHORTCUTS;
-      const parsed = JSON.parse(raw) as ShortcutBinding[];
-      if (!parsed.some((s) => s.id === 'search')) {
-        const searchDefault = DEFAULT_SHORTCUTS.find((s) => s.id === 'search');
-        if (searchDefault) return [searchDefault, ...parsed];
-      }
-      return parsed;
-    } catch {
-      return DEFAULT_SHORTCUTS;
-    }
-  });
+      localStorage.setItem(STORAGE_KEYS.discord, JSON.stringify(discordPrefs));
+    } catch {}
+    discordPresenceService.updatePrefs(discordPrefs);
+  }, [discordPrefs]);
+
+  useEffect(() => {
+    discordPresenceService.init(discordPrefs);
+  }, []);
 
   const [library, setLibrary] = useState<LibraryState>(() =>
     readJson(STORAGE_KEYS.library, INITIAL_LIBRARY_STATE)
@@ -325,7 +300,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [searchOpen, setSearchOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [requestAnimeOpen, setRequestAnimeOpen] = useState(false);
   const [backupBannerDismissed, setBackupBannerDismissed] = useState(false);
@@ -385,12 +359,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.shortcuts, JSON.stringify(shortcuts));
-    } catch {}
-  }, [shortcuts]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem(STORAGE_KEYS.library, JSON.stringify(library));
     } catch {}
   }, [library]);
@@ -436,16 +404,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 3. '?' Shortcuts Help dialog
-      if (e.key === '?' && !isEditable(e.target)) {
-        setShortcutsOpen(true);
-        return;
-      }
-
-      // 4. Escape closes search & modals
+      // 3. Escape closes search & modals
       if (e.key === 'Escape') {
         setSearchOpen(false);
-        setShortcutsOpen(false);
         setAuthOpen(false);
         setReportOpen(false);
         setRequestAnimeOpen(false);
@@ -885,18 +846,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLibrary((prev) => toggleTitleLike(prev, routeId));
   }, []);
 
-  const toggleMangaBookmark = useCallback((mangaId: string) => {
-    setLibrary((prev) => {
-      const exists = prev.mangaBookmarkedIds.includes(mangaId);
-      return {
-        ...prev,
-        mangaBookmarkedIds: exists
-          ? prev.mangaBookmarkedIds.filter((id) => id !== mangaId)
-          : [mangaId, ...prev.mangaBookmarkedIds],
-      };
-    });
-  }, []);
-
   const clearHistory = useCallback(() => {
     setLibrary((prev) => ({ ...prev, history: [] }));
     showToast('Watch history cleared');
@@ -1058,18 +1007,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [user]
   );
 
-  const updateShortcut = useCallback((id: string, key: string) => {
-    setShortcuts((prev) => prev.map((s) => (s.id === id ? { ...s, currentKey: key } : s)));
-  }, []);
-
-  const resetShortcuts = useCallback(() => {
-    setShortcuts(DEFAULT_SHORTCUTS);
-    showToast('Shortcuts reset');
-  }, [showToast]);
-
   const resetPlayerPrefs = useCallback(() => {
     setPlayerPrefs(DEFAULT_PLAYER_PREFS);
-    setShortcuts(DEFAULT_SHORTCUTS);
     showToast('Player preferences reset');
   }, [showToast]);
 
@@ -1092,9 +1031,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCaptionPrefs,
     privacyPrefs,
     setPrivacyPrefs,
-    shortcuts,
-    updateShortcut,
-    resetShortcuts,
+    discordPrefs,
+    setDiscordPrefs,
     resetPlayerPrefs,
     user,
     signIn,
@@ -1107,7 +1045,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addLibraryFolder,
     logWatchProgress,
     toggleLikeAnime,
-    toggleMangaBookmark,
     clearHistory,
     exportStorageJson,
     importBackupJson,
@@ -1129,8 +1066,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setChatOpen,
     authOpen,
     setAuthOpen,
-    shortcutsOpen,
-    setShortcutsOpen,
     reportOpen,
     setReportOpen,
     requestAnimeOpen,

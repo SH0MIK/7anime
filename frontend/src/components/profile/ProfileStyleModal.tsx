@@ -256,7 +256,7 @@ export const ProfileStyleModal: React.FC<ProfileStyleModalProps> = ({
               lineHeight: 1.4,
             }}
           >
-            You&apos;re Level {user?.level ?? 0}. XP comes from comments, community chat and forum posts.
+            You&apos;re Level {user?.level ?? 0}. XP comes from watching anime, comments and live chat.
             Seasonal frames open in their season; VIP members have all the rest.
           </div>
         </div>

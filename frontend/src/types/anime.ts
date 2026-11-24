@@ -81,6 +81,9 @@ export interface EpisodeItem {
   arc: string;
   season: number;
   thumbnail: string | null;
+  source?: string;
+  metadataVerified?: boolean;
+  isPlayable?: boolean;
 }
 
 export interface LatestEpisode {

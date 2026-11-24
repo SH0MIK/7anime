@@ -496,10 +496,10 @@ export class TmdbProvider {
     let targetSeasonNum: number | null = null;
     for (const t of titles) {
       const lower = t.toLowerCase();
-      const seasonMatch = lower.match(/(?:season|series|s)\s*(\d+)/i) ||
+      const seasonMatch = lower.match(/\b(?:season|series|s)\s*(\d+)\b/i) ||
         lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i) ||
-        lower.match(/\bpart\s*(\d+)/i) ||
-        lower.match(/\bcour\s*(\d+)/i);
+        lower.match(/\bpart\s*(\d+)\b/i) ||
+        lower.match(/\bcour\s*(\d+)\b/i);
       if (seasonMatch) {
         const parsed = parseInt(seasonMatch[1], 10);
         if (parsed > 0) {
@@ -527,14 +527,35 @@ export class TmdbProvider {
       }
     }
 
-    // 2. Named arc check in TMDB season names (e.g. Demon Slayer, Bleach)
+    // 2. Named arc check in TMDB season names (e.g. Demon Slayer, Bleach, Tokyo Revengers Tenjiku)
     if (!targetSeasonNum) {
+      // Extract distinctive subtitle tokens from titles
+      const distinctiveTokens: string[] = [];
+      for (const t of titles) {
+        const parts = t.split(/[:\-\–\—\~]/);
+        if (parts.length > 1) {
+          const sub = parts.slice(1).join(' ').toLowerCase();
+          const cleanSub = sub.replace(/\b(arc|hen|part|cour|season|the)\b/gi, '').trim();
+          const words = cleanSub.split(/\s+/).filter(w => w.length >= 4);
+          distinctiveTokens.push(...words);
+        }
+      }
+
       for (const season of validSeasons) {
         const sNameLower = season.name.toLowerCase();
         if (sNameLower === 'season 1' || sNameLower === 'specials') continue;
         for (const t of titles) {
           const tLower = t.toLowerCase();
           if (tLower.includes(sNameLower) || sNameLower.includes(tLower)) {
+            targetSeasonNum = season.season_number;
+            break;
+          }
+        }
+        if (targetSeasonNum) break;
+
+        // Check distinctive arc tokens (e.g. "tenjiku", "mugen train", "entertainment")
+        for (const token of distinctiveTokens) {
+          if (sNameLower.includes(token)) {
             targetSeasonNum = season.season_number;
             break;
           }
@@ -551,14 +572,32 @@ export class TmdbProvider {
 
     if (!targetSeasonNum && !isContinuousFranchise && media.startDate?.year) {
       const airYear = media.startDate.year;
-      // Filter seasons released in the same year
-      const matchingYearSeasons = validSeasons.filter((s) => s.air_date && s.air_date.startsWith(String(airYear)));
-      if (matchingYearSeasons.length === 1) {
-        targetSeasonNum = matchingYearSeasons[0].season_number;
-      } else if (matchingYearSeasons.length > 1 && media.episodes) {
-        const exactCountSeason = matchingYearSeasons.find((s) => s.episode_count === media.episodes);
-        if (exactCountSeason) {
-          targetSeasonNum = exactCountSeason.season_number;
+      const airMonth = media.startDate.month || 1;
+      // Filter seasons released in the same year or within 12 months
+      const candidateSeasons = validSeasons.filter((s) => {
+        if (!s.air_date) return false;
+        const sYear = parseInt(s.air_date.slice(0, 4), 10);
+        return Math.abs(sYear - airYear) <= 1;
+      });
+
+      if (candidateSeasons.length > 0) {
+        // Find season with closest air date and matching episode count
+        let bestSeason = candidateSeasons[0];
+        let minDiff = Infinity;
+        for (const s of candidateSeasons) {
+          const sYear = parseInt(s.air_date!.slice(0, 4), 10);
+          const sMonth = parseInt(s.air_date!.slice(5, 7), 10) || 1;
+          let diff = Math.abs((sYear - airYear) * 12 + (sMonth - airMonth));
+          if (media.episodes && s.episode_count === media.episodes) {
+            diff -= 20; // heavy preference for matching episode count
+          }
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestSeason = s;
+          }
+        }
+        if (minDiff < 10) {
+          targetSeasonNum = bestSeason.season_number;
         }
       }
     }

@@ -18,6 +18,8 @@ import {
 import type { AnimeTitle, EpisodeItem } from '@/src/types/anime';
 import { useApp } from '@/src/context/AppContext';
 import { formatTimeSec } from './BrandMark';
+import { discordPresenceService } from '@/src/services/discordPresenceService';
+import { discordPresenceCoordinator } from '@/src/services/discordPresenceCoordinator';
 
 interface GlassPlayerProps {
   anime: AnimeTitle;
@@ -81,6 +83,49 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  const hasStartedPlaybackRef = useRef(false);
+
+  // Synchronize playback state to Discord Presence without polling
+  useEffect(() => {
+    if (playing) {
+      hasStartedPlaybackRef.current = true;
+      discordPresenceCoordinator.claimLeadership(anime.routeId);
+      const cur = videoRef.current?.currentTime || 0;
+      const dur = videoRef.current?.duration || episode.durationSec || 1440;
+      discordPresenceService.updatePlayback({
+        animeTitle: anime.title,
+        routeId: anime.routeId,
+        episodeNumber: episode.number,
+        seasonNumber: episode.season || 1,
+        isPlaying: true,
+        currentTimeSec: Math.floor(cur),
+        durationSec: Math.floor(dur),
+        startTimestamp: Date.now() - Math.floor(cur * 1000),
+      });
+    } else if (hasStartedPlaybackRef.current) {
+      const cur = videoRef.current?.currentTime || 0;
+      const dur = videoRef.current?.duration || episode.durationSec || 1440;
+      discordPresenceService.updatePlayback({
+        animeTitle: anime.title,
+        routeId: anime.routeId,
+        episodeNumber: episode.number,
+        seasonNumber: episode.season || 1,
+        isPlaying: false,
+        currentTimeSec: Math.floor(cur),
+        durationSec: Math.floor(dur),
+      });
+    }
+  }, [playing, anime.title, anime.routeId, episode.number, episode.season, episode.durationSec]);
+
+  // Clean up Discord activity and yield leader status on episode switch or player unmount
+  useEffect(() => {
+    return () => {
+      hasStartedPlaybackRef.current = false;
+      discordPresenceService.clearActivity();
+      discordPresenceCoordinator.releaseLeadership();
+    };
+  }, [anime.routeId, episode.number]);
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -142,6 +187,9 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
 
   const handleEnded = () => {
     setPlaying(false);
+    hasStartedPlaybackRef.current = false;
+    discordPresenceService.clearActivity();
+    discordPresenceCoordinator.releaseLeadership();
     logWatchProgress(anime.routeId, episode.number, duration, duration, audioMode);
     if (playerPrefs.autoplayNext && hasNext && onNextEpisode) {
       onNextEpisode();

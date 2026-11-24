@@ -375,22 +375,6 @@ export const WatchAnimeMeta: React.FC<WatchAnimeMetaProps> = ({ anime, watchOrde
         </section>
       )}
 
-      {/* Toonkotsu Banner */}
-      <Link
-        to="/manga"
-        className="tk-promo"
-        aria-label="Toonkotsu: read manga, manhwa and manhua free"
-      >
-        <picture>
-          <source type="image/avif" srcSet="/assets/misc/toonkotsu-banner-1000x124-kCVs7T0w.avif" />
-          <source type="image/webp" srcSet="/assets/misc/toonkotsu-banner-1000x124-BHfg1slQ.webp" />
-          <img
-            src="/assets/misc/toonkotsu-banner-1000x124-BHfg1slQ.webp"
-            alt="Toonkotsu — Read Manga, Manhwa & Manhua Free"
-          />
-        </picture>
-      </Link>
-
       {/* Inline Trailer Preview Dialog */}
       {trailerOpen && (
         <div

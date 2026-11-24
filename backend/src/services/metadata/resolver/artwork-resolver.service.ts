@@ -2,6 +2,7 @@ import { ArtworkResolution, AnimeTrailer } from '@7anime/shared';
 import { AniListMedia } from '../providers/anilist.provider.js';
 import { TmdbProvider, TmdbImagesResponse, TmdbVideo } from '../providers/tmdb.provider.js';
 import { LogoResolverService } from './logo-resolver.service.js';
+import { AnimeIdentityValidator } from './anime-identity-validator.service.js';
 
 export interface ComprehensiveArtworkResult {
   artwork: {
@@ -45,43 +46,53 @@ export class ArtworkResolverService {
     let tmdbPosterUrl: string | undefined = undefined;
     let tmdbTrailer: AnimeTrailer | undefined = undefined;
 
-    // 2. Resolve TMDB artwork if TMDB ID is known
+    // 2. Resolve TMDB artwork if TMDB ID is known and verified
     if (tmdbId && mediaType) {
       try {
-        const [images, videos] = await Promise.all([
-          mediaType === 'movie' ? TmdbProvider.getMovieImages(tmdbId) : TmdbProvider.getTvImages(tmdbId),
-          mediaType === 'movie' ? TmdbProvider.getMovieVideos(tmdbId) : TmdbProvider.getTvVideos(tmdbId),
-        ]);
+        const details = mediaType === 'movie'
+          ? await TmdbProvider.getMovieDetails(tmdbId)
+          : await TmdbProvider.getTvDetails(tmdbId);
 
-        if (images) {
-          // Transparent PNG logo — reuse already-fetched images.logos to prevent duplicate TMDB images API requests
-          const logoResult = await LogoResolverService.resolveLogo(
-            media.id,
-            tmdbId,
-            mediaType,
-            images.logos
-          );
-          if (logoResult?.logoUrl) {
-            tmdbLogoUrl = logoResult.logoUrl;
+        const check = details ? AnimeIdentityValidator.validateTmdbMatch(media, details) : { isValid: false, reason: 'Details unavailable' };
+        if (!check.isValid) {
+          console.warn(`[ArtworkResolverService] TMDB ${tmdbId} identity mismatch for AniList ${media.id}: ${check.reason}`);
+        } else {
+          const [images, videos] = await Promise.all([
+            mediaType === 'movie' ? TmdbProvider.getMovieImages(tmdbId) : TmdbProvider.getTvImages(tmdbId),
+            mediaType === 'movie' ? TmdbProvider.getMovieVideos(tmdbId) : TmdbProvider.getTvVideos(tmdbId),
+          ]);
+
+          if (images) {
+            // Transparent PNG logo — reuse already-fetched images.logos to prevent duplicate TMDB images API requests
+            const logoResult = await LogoResolverService.resolveLogo(
+              media.id,
+              tmdbId,
+              mediaType,
+              images.logos,
+              media
+            );
+            if (logoResult?.logoUrl) {
+              tmdbLogoUrl = logoResult.logoUrl;
+            }
+
+            // Best backdrop
+            const bestBackdrop = TmdbProvider.extractBestBackdrop(images);
+            if (bestBackdrop) {
+              tmdbBackdropUrl = bestBackdrop;
+            }
+
+            // Best poster
+            const bestPoster = TmdbProvider.extractBestPoster(images);
+            if (bestPoster) {
+              tmdbPosterUrl = bestPoster;
+            }
           }
 
-          // Best backdrop
-          const bestBackdrop = TmdbProvider.extractBestBackdrop(images);
-          if (bestBackdrop) {
-            tmdbBackdropUrl = bestBackdrop;
+          // Best trailer
+          const bestTrailer = TmdbProvider.extractBestTrailer(videos);
+          if (bestTrailer) {
+            tmdbTrailer = bestTrailer;
           }
-
-          // Best poster
-          const bestPoster = TmdbProvider.extractBestPoster(images);
-          if (bestPoster) {
-            tmdbPosterUrl = bestPoster;
-          }
-        }
-
-        // Best trailer
-        const bestTrailer = TmdbProvider.extractBestTrailer(videos);
-        if (bestTrailer) {
-          tmdbTrailer = bestTrailer;
         }
       } catch (err) {
         console.warn(`[ArtworkResolverService] TMDB artwork fetch error for ${tmdbId}:`, (err as Error).message);

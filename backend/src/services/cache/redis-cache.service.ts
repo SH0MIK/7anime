@@ -182,6 +182,14 @@ export class RedisCacheService {
   }
 
   /**
+   * Alias for del(key) to conform with standard Cache / Map interface conventions
+   * and prevent runtime TypeErrors if delete() is invoked.
+   */
+  public async delete(key: string): Promise<boolean> {
+    return this.del(key);
+  }
+
+  /**
    * Checks if key exists in memory or Redis.
    */
   public async exists(key: string): Promise<boolean> {
@@ -212,6 +220,54 @@ export class RedisCacheService {
     }
 
     return false;
+  }
+
+  /**
+   * Deletes all keys matching a given prefix from local memory and Redis.
+   */
+  public async delByPrefix(prefix: string): Promise<number> {
+    const memoryDeleted = this.memoryFallback.deleteByPrefix(prefix);
+
+    if (this.isConfigured && this.restUrl && this.restToken) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 4000);
+
+        // Fetch keys matching prefix
+        const keysRes = await fetch(`${this.restUrl}/keys/${encodeURIComponent(prefix + '*')}`, {
+          headers: {
+            Authorization: `Bearer ${this.restToken}`,
+            Accept: 'application/json',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (keysRes.ok) {
+          const keysJson = (await keysRes.json()) as any;
+          const matchingKeys = Array.isArray(keysJson?.result) ? keysJson.result : [];
+
+          if (matchingKeys.length > 0) {
+            // Delete matching keys in Redis
+            const delController = new AbortController();
+            const delTimeout = setTimeout(() => delController.abort(), 4000);
+            await fetch(`${this.restUrl}/del/${matchingKeys.map((k: string) => encodeURIComponent(k)).join('/')}`, {
+              headers: {
+                Authorization: `Bearer ${this.restToken}`,
+                Accept: 'application/json',
+              },
+              signal: delController.signal,
+            });
+            clearTimeout(delTimeout);
+            return Math.max(memoryDeleted, matchingKeys.length);
+          }
+        }
+      } catch (err) {
+        console.warn(`[RedisCacheService] Redis delByPrefix failed for "${prefix}":`, (err as Error).message);
+      }
+    }
+
+    return memoryDeleted;
   }
 
   /**

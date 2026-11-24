@@ -11,18 +11,16 @@ import { SearchModal } from '@/src/components/SearchModal';
 import { ChatDrawer } from '@/src/components/ChatDrawer';
 import {
   AuthModal,
-  KeyboardHelpModal,
   ReportModal,
   RequestAnimeDialog,
 } from '@/src/components/Dialogs';
 
 import { HomePage } from '@/src/pages/HomePage';
 import { BrowsePage } from '@/src/pages/BrowsePage';
+import { SchedulePage } from '@/src/pages/SchedulePage';
 import { LatestPage } from '@/src/pages/LatestPage';
 import { GenresPage } from '@/src/pages/GenresPage';
-import { MangaPage } from '@/src/pages/MangaPage';
 import { LibraryPage } from '@/src/pages/LibraryPage';
-import { CommunityPage } from '@/src/pages/CommunityPage';
 import { WatchTogetherPage } from '@/src/pages/WatchTogetherPage';
 import { LeaderboardPage } from '@/src/pages/LeaderboardPage';
 import { AnimeDetailPage } from '@/src/pages/AnimeDetailPage';
@@ -114,18 +112,18 @@ const AppLayout: React.FC = () => {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/anime" element={<BrowsePage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/discover" element={<Navigate to="/anime" replace />} />
           <Route path="/latest" element={<LatestPage />} />
           <Route path="/genres" element={<GenresPage />} />
-          <Route path="/manga" element={<MangaPage />} />
-          <Route path="/manga/:title" element={<MangaPage />} />
-          <Route path="/manga/:title/:chapter" element={<MangaPage />} />
+          <Route path="/manga" element={<Navigate to="/anime" replace />} />
+          <Route path="/manga/*" element={<Navigate to="/anime" replace />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/watchlist" element={<Navigate to="/library" replace />} />
           <Route path="/history" element={<Navigate to="/library" replace />} />
           <Route path="/downloads" element={<Navigate to="/library" replace />} />
-          <Route path="/community" element={<CommunityPage />} />
-          <Route path="/community/t/:id" element={<CommunityPage />} />
+          <Route path="/community" element={<Navigate to="/" replace />} />
+          <Route path="/community/*" element={<Navigate to="/" replace />} />
           <Route path="/watch-together" element={<WatchTogetherPage />} />
           <Route path="/watch-together/:code" element={<WatchTogetherPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
@@ -158,7 +156,6 @@ const AppLayout: React.FC = () => {
       <SearchModal />
       <ChatDrawer />
       <AuthModal />
-      <KeyboardHelpModal />
       <ReportModal />
       <RequestAnimeDialog />
       <ToastPresenter />

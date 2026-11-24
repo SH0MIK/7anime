@@ -54,7 +54,7 @@ export const ChatDrawer: React.FC = () => {
   return createPortal(
     <>
       <div className="chat-drawer-scrim" onClick={() => setChatOpen(false)} />
-      <aside className="chat-drawer" aria-label="Community chat">
+      <aside className="chat-drawer" aria-label="Live chat">
         <div
           style={{
             display: 'flex',
@@ -66,7 +66,7 @@ export const ChatDrawer: React.FC = () => {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <strong style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', lineHeight: 1.2 }}>
-              Community chat
+              Live chat
             </strong>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'rgba(255,255,255,0.58)' }}>
               <span

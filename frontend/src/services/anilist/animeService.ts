@@ -4,8 +4,10 @@ import {
   ANIME_DETAILS_QUERY,
   BROWSE_ANIME_QUERY,
   SEARCH_PREVIEW_QUERY,
+  STUDIO_MEDIA_QUERY,
+  WEEKLY_AIRING_SCHEDULE_QUERY,
 } from './queries';
-import { normalizeAniListMedia } from './normalizers';
+import { normalizeAniListMedia, slugifyTitle } from './normalizers';
 import type {
   AniListMedia,
   AniListMediaSeason,
@@ -14,6 +16,7 @@ import type {
   AniListPageInfo,
 } from './types';
 import type { AnimeTitle, BrowseFilters } from '@/src/types/anime';
+import type { AiringScheduleItem } from '@7anime/shared';
 
 export interface HomepageFeedData {
   spotlight: AnimeTitle[];
@@ -142,25 +145,77 @@ export class AniListService {
       variables.search = filters.q.trim();
     }
 
-    if (filters.genres && filters.genres.length > 0) {
-      variables.genre_in = filters.genres;
+    // 1. Studio Resolution: Resolve verified studio anime IDs
+    if (filters.studio && filters.studio.trim() && filters.studio.toLowerCase() !== 'all') {
+      const studioName = filters.studio.trim();
+      try {
+        const studioData = await anilistClient.query<{
+          Studio?: {
+            id: number;
+            name: string;
+            media?: {
+              nodes?: Array<{ id: number }>;
+            };
+          };
+        }>(STUDIO_MEDIA_QUERY, { studio: studioName }, { ttlMs: 24 * 60 * 60 * 1000 });
+
+        const studioNodes = studioData.Studio?.media?.nodes || [];
+        const studioIds = Array.from(new Set(studioNodes.map((n) => n.id)));
+        if (studioIds.length > 0) {
+          variables.id_in = studioIds;
+        } else {
+          variables.id_in = [-1]; // Explicitly empty result if studio has no verified media
+        }
+      } catch (err) {
+        console.warn(`[AniListService] Studio resolution failed for "${studioName}":`, err);
+      }
     }
 
-    if (filters.tags && filters.tags.length > 0) {
-      variables.tag_in = filters.tags;
+    // 2. Official AniList Genres vs Tags Separation
+    const ANILIST_GENRES = new Set([
+      'Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy', 'Horror',
+      'Mahou Shoujo', 'Mecha', 'Music', 'Mystery', 'Psychological', 'Romance',
+      'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller',
+    ]);
+
+    const validGenres: string[] = [];
+    const extraTags: string[] = [];
+    (filters.genres || []).forEach((g) => {
+      const trimmed = g.trim();
+      if (!trimmed) return;
+      const matched = Array.from(ANILIST_GENRES).find(
+        (og) => og.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (matched) {
+        validGenres.push(matched);
+      } else {
+        extraTags.push(trimmed);
+      }
+    });
+
+    if (validGenres.length > 0) {
+      variables.genre_in = validGenres;
     }
 
+    const combinedTags = Array.from(new Set([...(filters.tags || []), ...extraTags]));
+    if (combinedTags.length > 0) {
+      variables.tag_in = combinedTags;
+    }
+
+    // 3. Season
     if (filters.season && filters.season !== 'all') {
       variables.season = filters.season.toUpperCase() as AniListMediaSeason;
     }
 
+    // 4. Release Year
     if (filters.year && filters.year !== 'all') {
       const parsedYear = parseInt(filters.year, 10);
-      if (!isNaN(parsedYear)) {
+      if (!isNaN(parsedYear) && parsedYear > 1950) {
         variables.seasonYear = parsedYear;
       }
     }
 
+    // 5. Airing Status
     if (filters.status && filters.status !== 'all') {
       const statusMap: Record<string, AniListMediaStatus> = {
         releasing: 'RELEASING',
@@ -169,6 +224,7 @@ export class AniListService {
         completed: 'FINISHED',
         upcoming: 'NOT_YET_RELEASED',
         cancelled: 'CANCELLED',
+        hiatus: 'HIATUS',
       };
       const key = filters.status.toLowerCase();
       if (statusMap[key]) {
@@ -176,6 +232,7 @@ export class AniListService {
       }
     }
 
+    // 6. Media Format
     if (filters.format && filters.format !== 'all') {
       const formatMap: Record<string, AniListMediaFormat> = {
         tv: 'TV',
@@ -183,6 +240,7 @@ export class AniListService {
         ova: 'OVA',
         ona: 'ONA',
         special: 'SPECIAL',
+        music: 'MUSIC',
       };
       const key = filters.format.toLowerCase();
       if (formatMap[key]) {
@@ -190,15 +248,34 @@ export class AniListService {
       }
     }
 
-    // Sort mapping
+    // 7. Advanced Filters: Min Score & Min Episodes
+    if (filters.minScore) {
+      const scoreNum = parseFloat(filters.minScore);
+      if (!isNaN(scoreNum) && scoreNum > 0) {
+        // AniList averageScore is an integer on 0-100 scale (e.g. 7.0 -> 70, 7.5 -> 75, 8.0 -> 80)
+        variables.averageScore_greater = Math.round(scoreNum * 10);
+      }
+    }
+
+    if (filters.minEpisodes) {
+      const epNum = parseInt(filters.minEpisodes, 10);
+      if (!isNaN(epNum) && epNum > 0) {
+        variables.episodes_greater = Math.max(1, epNum - 1);
+      }
+    }
+
+    // 8. Sorting
     const sortMap: Record<string, string[]> = {
-      trending: ['TRENDING_DESC'],
+      recommended: ['POPULARITY_DESC', 'SCORE_DESC'],
       popular: ['POPULARITY_DESC'],
+      trending: ['TRENDING_DESC'],
       score: ['SCORE_DESC'],
+      mal: ['SCORE_DESC'],
       newest: ['START_DATE_DESC'],
       title: ['TITLE_ROMAJI'],
       episodes: ['EPISODES_DESC'],
-      recommended: ['POPULARITY_DESC', 'SCORE_DESC'],
+      sub: ['POPULARITY_DESC'],
+      dub: ['POPULARITY_DESC'],
     };
 
     const sortKey = (filters.sort || 'popular').toLowerCase();
@@ -211,7 +288,15 @@ export class AniListService {
       };
     }>(BROWSE_ANIME_QUERY, variables, { ttlMs: 10 * 60 * 1000 });
 
-    const items = (data.Page?.media || []).map(normalizeAniListMedia);
+    let items = (data.Page?.media || []).map(normalizeAniListMedia);
+
+    // 9. Language Filter Post-processing
+    if (filters.language === 'sub') {
+      items = items.filter((item) => item.subCount > 0);
+    } else if (filters.language === 'dub') {
+      items = items.filter((item) => item.dubCount > 0);
+    }
+
     const pageInfo = data.Page?.pageInfo || {
       total: 0,
       perPage,
@@ -221,6 +306,85 @@ export class AniListService {
     };
 
     return { items, pageInfo };
+  }
+
+  /**
+   * Fetches the weekly airing schedule directly from AniList with 10-minute caching.
+   */
+  public static async getWeeklySchedule(
+    start: number,
+    end: number,
+    page = 1,
+    perPage = 50
+  ): Promise<{ items: AiringScheduleItem[]; total: number }> {
+    const data = await anilistClient.query<{
+      Page: {
+        pageInfo: AniListPageInfo;
+        airingSchedules: Array<{
+          id: number;
+          airingAt: number;
+          timeUntilAiring: number;
+          episode: number;
+          media: AniListMedia;
+        }>;
+      };
+    }>(
+      WEEKLY_AIRING_SCHEDULE_QUERY,
+      { start, end, page, perPage },
+      { ttlMs: 10 * 60 * 1000 }
+    );
+
+    const now = Math.floor(Date.now() / 1000);
+    const rawList = data.Page?.airingSchedules || [];
+    const total = data.Page?.pageInfo?.total || rawList.length;
+
+    const items: AiringScheduleItem[] = rawList.map((item) => {
+      const media = item.media;
+      const eng = media.title?.english?.trim();
+      const rom = media.title?.romaji?.trim();
+      const nat = media.title?.native?.trim();
+      const title = eng || rom || 'Anime';
+      const slug = slugifyTitle(title) || `anime-${media.id}`;
+      const routeId = `${slug}-${media.id}`;
+
+      let status: 'released' | 'upcoming' | 'delayed' = 'upcoming';
+      if (item.airingAt <= now) {
+        status = 'released';
+      } else if (media.status === 'CANCELLED' || media.status === 'HIATUS') {
+        status = 'delayed';
+      }
+
+      const studios = (media.studios?.nodes || []).map((s) => s.name).filter(Boolean);
+
+      return {
+        id: item.id,
+        anilistId: media.id,
+        malId: media.idMal || null,
+        routeId,
+        title,
+        romajiTitle: rom || undefined,
+        nativeTitle: nat || undefined,
+        episode: item.episode,
+        airingAt: item.airingAt,
+        timeUntilAiring: item.airingAt - now,
+        status,
+        poster:
+          media.coverImage?.extraLarge ||
+          media.coverImage?.large ||
+          media.coverImage?.medium ||
+          '',
+        banner: media.bannerImage || null,
+        format: media.format || 'TV',
+        genres: media.genres || [],
+        score: media.averageScore !== null && media.averageScore !== undefined
+          ? Number((media.averageScore / 10).toFixed(1))
+          : null,
+        studios,
+        totalEpisodes: media.episodes || null,
+      };
+    });
+
+    return { items, total };
   }
 
   /**

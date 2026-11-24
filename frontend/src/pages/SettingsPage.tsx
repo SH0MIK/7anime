@@ -1,34 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
-  Captions,
   Check,
-  Clapperboard,
+  ChevronDown,
   Database,
   Lock,
   Palette,
-  Play,
-  PlayCircle,
+  Radio,
   Search,
   Shield,
-  Sliders,
   Sun,
   User,
 } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { AccountSection, ACCOUNT_SUBS, type AccountSub } from '@/src/components/AccountSection';
 import { useApp } from '@/src/context/AppContext';
 import { ACCENT_SWATCHES, THEME_OPTIONS } from '@/src/utils/themeUtils';
 import { ProfileStyleModal } from '@/src/components/profile/ProfileStyleModal';
 import { apiClient } from '@/src/services/apiClient';
+import { discordPresenceService, type PresenceState } from '@/src/services/discordPresenceService';
+import { cacheManager, imageTracker, type CacheMetrics } from '@/src/services/cache';
 
 type SettingsSection =
   | 'account'
   | 'appearance'
-  | 'content'
-  | 'player'
-  | 'captions'
   | 'notifications'
+  | 'discord'
   | 'data';
 
 export const SettingsPage: React.FC = () => {
@@ -42,16 +39,10 @@ export const SettingsPage: React.FC = () => {
     signOut,
     themePrefs,
     setThemePrefs,
-    contentPrefs,
-    setContentPrefs,
-    playerPrefs,
-    setPlayerPrefs,
-    captionPrefs,
-    setCaptionPrefs,
     privacyPrefs,
     setPrivacyPrefs,
-    resetPlayerPrefs,
-    resetShortcuts,
+    discordPrefs,
+    setDiscordPrefs,
     clearHistory,
     clearRecentSearches,
     exportStorageJson,
@@ -60,36 +51,109 @@ export const SettingsPage: React.FC = () => {
     updateUserProfile,
   } = useApp();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  const [presenceState, setPresenceState] = useState<PresenceState>(() =>
+    discordPresenceService.getState()
+  );
+
+  const [cacheStats, setCacheStats] = useState<CacheMetrics>(() =>
+    cacheManager.getCacheStats()
+  );
+
+  useEffect(() => {
+    const unsubPresence = discordPresenceService.subscribe((s) => setPresenceState(s));
+    const unsubCache = cacheManager.subscribeToStats((s) => setCacheStats(s));
+    return () => {
+      unsubPresence();
+      unsubCache();
+    };
+  }, []);
+
   const [section, setSection] = useState<SettingsSection>('account');
-  const [filterQuery, setFilterQuery] = useState('');
+  const [accountExpanded, setAccountExpanded] = useState<boolean>(false);
   const [accountSub, setAccountSub] = useState<AccountSub>('overview');
+  const [filterQuery, setFilterQuery] = useState('');
   const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
-  const { hash } = useLocation();
   const spyLockUntil = useRef(0);
+
   // Scroll-spy updates, ignored briefly after a sidebar click so short end sections stay selected.
   const handleSpy = useCallback((id: AccountSub) => {
     if (Date.now() >= spyLockUntil.current) setAccountSub(id);
   }, []);
 
-  // Deep links such as /settings#pf-password or /settings#settings-player
+  // Deep links and direct route / reload synchronization
   useEffect(() => {
-    if (!hash) return;
-    const id = hash.slice(1);
-    const timer = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (id.startsWith('settings-')) setSection(id.replace('settings-', '') as SettingsSection);
-    }, 60);
-    return () => window.clearTimeout(timer);
-  }, [hash]);
+    const sectionParam = searchParams.get('section') as SettingsSection | null;
+    const subParam = searchParams.get('sub') as AccountSub | null;
+    const h = location.hash;
+
+    if (h) {
+      const id = h.slice(1);
+      if (id.startsWith('pf-')) {
+        const sub = id.slice(3) as AccountSub;
+        setSection('account');
+        setAccountSub(sub);
+        setAccountExpanded(true);
+        const timer = window.setTimeout(() => {
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+        return () => window.clearTimeout(timer);
+      }
+      if (id.startsWith('settings-')) {
+        const sec = id.replace('settings-', '') as SettingsSection;
+        if (['account', 'appearance', 'notifications', 'discord', 'data'].includes(sec)) {
+          setSection(sec);
+          if (sec === 'account') {
+            setAccountExpanded(true);
+          } else {
+            setAccountExpanded(false);
+          }
+        }
+        const timer = window.setTimeout(() => {
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+        return () => window.clearTimeout(timer);
+      }
+    }
+
+    if (subParam) {
+      setSection('account');
+      setAccountSub(subParam);
+      setAccountExpanded(true);
+      const timer = window.setTimeout(() => {
+        document.getElementById(`pf-${subParam}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (sectionParam) {
+      if (['account', 'appearance', 'notifications', 'discord', 'data'].includes(sectionParam)) {
+        setSection(sectionParam);
+        if (sectionParam === 'account') {
+          setAccountExpanded(true);
+        } else {
+          setAccountExpanded(false);
+        }
+      }
+    }
+  }, [searchParams, location.hash]);
+
+  // Auto-expand account if the filter search query explicitly matches account suboptions
+  useEffect(() => {
+    const q = filterQuery.trim().toLowerCase();
+    if (q && ('account sign in profile sync guest overview visibility connected password devices'.includes(q))) {
+      setAccountExpanded(true);
+    }
+  }, [filterQuery]);
 
   const sections: { id: SettingsSection; label: string; icon: React.ReactNode; keywords: string }[] = [
-    { id: 'account', label: t('settings.account'), icon: <User size={16} />, keywords: 'account sign in profile sync guest' },
+    { id: 'account', label: t('settings.account'), icon: <User size={16} />, keywords: 'account sign in profile sync guest overview visibility connected password devices' },
     { id: 'appearance', label: t('settings.appearance'), icon: <Sun size={16} />, keywords: 'theme accent dark light language english animations blur text size' },
-    { id: 'content', label: t('settings.content'), icon: <Clapperboard size={16} />, keywords: 'title language sort mature thumbs continue watching' },
-    { id: 'player', label: t('settings.player'), icon: <Play size={16} />, keywords: 'audio sub dub server autoplay auto skip speed' },
-    { id: 'captions', label: t('settings.captions'), icon: <Captions size={16} />, keywords: 'subtitle font color background opacity edge' },
-    { id: 'notifications', label: t('settings.notifications'), icon: <Bell size={16} />, keywords: 'alerts push episodes privacy' },
-    { id: 'data', label: t('settings.yourData'), icon: <Lock size={16} />, keywords: 'export history reset device storage' },
+    { id: 'notifications', label: t('settings.notifications'), icon: <Bell size={16} />, keywords: 'alerts push episodes privacy analytics diagnostics' },
+    { id: 'discord', label: 'Discord Presence', icon: <Radio size={16} />, keywords: 'discord rich presence activity watching companion game status' },
+    { id: 'data', label: t('settings.yourData'), icon: <Lock size={16} />, keywords: 'export history reset device storage cache l1 l2' },
   ];
 
   const visibleSections = useMemo(() => {
@@ -105,6 +169,14 @@ export const SettingsPage: React.FC = () => {
 
   const scrollToSection = (id: SettingsSection) => {
     setSection(id);
+    if (id !== 'account') {
+      setAccountExpanded(false);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set('section', id);
+    next.delete('sub');
+    setSearchParams(next, { replace: true });
+
     const el = document.getElementById(`settings-${id}`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -124,7 +196,19 @@ export const SettingsPage: React.FC = () => {
     spyLockUntil.current = Date.now() + 1200;
     setAccountSub(id);
     setSection('account');
-    document.getElementById(`pf-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setAccountExpanded(true);
+
+    const next = new URLSearchParams(searchParams);
+    next.set('section', 'account');
+    next.set('sub', id);
+    setSearchParams(next, { replace: true });
+
+    const targetEl = document.getElementById(`pf-${id}`);
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      document.getElementById('settings-account')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   return (
@@ -154,23 +238,60 @@ export const SettingsPage: React.FC = () => {
                 <button
                   type="button"
                   className={`pf-nav__item ${section === s.id ? 'is-active' : ''}`}
-                  onClick={() => scrollToSection(s.id)}
+                  onClick={() => {
+                    if (s.id === 'account') {
+                      if (!accountExpanded) {
+                        setAccountExpanded(true);
+                        scrollToSection('account');
+                      } else if (section === 'account') {
+                        setAccountExpanded(false);
+                      } else {
+                        scrollToSection('account');
+                      }
+                    } else {
+                      setAccountExpanded(false);
+                      scrollToSection(s.id);
+                    }
+                  }}
+                  aria-expanded={s.id === 'account' ? accountExpanded : undefined}
+                  aria-controls={s.id === 'account' ? 'account-suboptions' : undefined}
                 >
                   {s.icon}
                   <span>{s.label}</span>
+                  {s.id === 'account' && (
+                    <ChevronDown
+                      size={15}
+                      style={{
+                        marginLeft: 'auto',
+                        transition: 'transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)',
+                        transform: accountExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        opacity: 0.7,
+                      }}
+                      aria-hidden="true"
+                    />
+                  )}
                 </button>
-                {s.id === 'account' && user && (
-                  <div className="pf-nav__subs">
-                    {ACCOUNT_SUBS.map((sub) => (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        className={`pf-nav__sub ${section === 'account' && accountSub === sub.id ? 'is-active' : ''}`}
-                        onClick={() => jumpSub(sub.id)}
-                      >
-                        {sub.label}
-                      </button>
-                    ))}
+                {s.id === 'account' && (
+                  <div
+                    id="account-suboptions"
+                    className="pf-nav__accordion"
+                    data-expanded={accountExpanded ? 'true' : 'false'}
+                    role="region"
+                    aria-label="Account subpages"
+                  >
+                    <div className="pf-nav__subs">
+                      {ACCOUNT_SUBS.map((sub) => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          className={`pf-nav__sub ${section === 'account' && accountSub === sub.id ? 'is-active' : ''}`}
+                          onClick={() => jumpSub(sub.id)}
+                          tabIndex={accountExpanded ? 0 : -1}
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </React.Fragment>
@@ -408,255 +529,6 @@ export const SettingsPage: React.FC = () => {
             </section>
           )}
 
-          {showSection('content') && (
-            <section id="settings-content" style={{ scrollMarginTop: 84, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <Sliders size={18} />
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('settings.content')}</h2>
-              </div>
-              <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13.5 }}>Preferred title language</span>
-                  <div className="watch-audio-switch">
-                    {(['english', 'original'] as const).map((lang) => (
-                      <button
-                        key={lang}
-                        type="button"
-                        aria-pressed={contentPrefs.titleLanguage === lang}
-                        onClick={() => setContentPrefs((p) => ({ ...p, titleLanguage: lang }))}
-                      >
-                        {lang}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5, cursor: 'pointer' }}>
-                  <span>Show Continue Watching on Home</span>
-                  <input
-                    type="checkbox"
-                    checked={contentPrefs.showContinueWatchingOnHome}
-                    onChange={(e) =>
-                      setContentPrefs((p) => ({ ...p, showContinueWatchingOnHome: e.target.checked }))
-                    }
-                  />
-                </label>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5, cursor: 'pointer' }}>
-                  <span>Show episode thumbnails on Home</span>
-                  <input
-                    type="checkbox"
-                    checked={contentPrefs.showEpisodeThumbsOnHome}
-                    onChange={(e) =>
-                      setContentPrefs((p) => ({ ...p, showEpisodeThumbsOnHome: e.target.checked }))
-                    }
-                  />
-                </label>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5, cursor: 'pointer' }}>
-                  <span>Include mature (18+) catalog items</span>
-                  <input
-                    type="checkbox"
-                    checked={contentPrefs.showMature18Plus}
-                    onChange={(e) =>
-                      setContentPrefs((p) => ({ ...p, showMature18Plus: e.target.checked }))
-                    }
-                  />
-                </label>
-              </div>
-            </section>
-          )}
-
-          {showSection('player') && (
-            <section id="settings-player" style={{ scrollMarginTop: 84, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <PlayCircle size={18} />
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('settings.player')}</h2>
-                </div>
-                <button type="button" className="watch-pill" onClick={resetPlayerPrefs}>
-                  Reset defaults
-                </button>
-              </div>
-              <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13.5 }}>Default audio</span>
-                  <div className="watch-audio-switch">
-                    {(['sub', 'dub'] as const).map((a) => (
-                      <button
-                        key={a}
-                        type="button"
-                        aria-pressed={playerPrefs.preferredAudio === a}
-                        onClick={() => setPlayerPrefs((p) => ({ ...p, preferredAudio: a }))}
-                      >
-                        {a.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13.5 }}>Default server</span>
-                  <div className="watch-audio-switch">
-                    {(['default', 'beta'] as const).map((srv) => (
-                      <button
-                        key={srv}
-                        type="button"
-                        aria-pressed={playerPrefs.defaultServer === srv}
-                        onClick={() => setPlayerPrefs((p) => ({ ...p, defaultServer: srv }))}
-                      >
-                        {srv}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, cursor: 'pointer' }}>
-                  <span>Autoplay next episode</span>
-                  <input
-                    type="checkbox"
-                    checked={playerPrefs.autoplayNext}
-                    onChange={(e) => setPlayerPrefs((p) => ({ ...p, autoplayNext: e.target.checked }))}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, cursor: 'pointer' }}>
-                  <span>Auto-skip intro / outro segments</span>
-                  <input
-                    type="checkbox"
-                    checked={playerPrefs.autoSkip}
-                    onChange={(e) => setPlayerPrefs((p) => ({ ...p, autoSkip: e.target.checked }))}
-                  />
-                </label>
-
-                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5 }}>
-                  <span>Skip step ({playerPrefs.skipStepSec}s)</span>
-                  <input
-                    type="range"
-                    min={5}
-                    max={30}
-                    step={5}
-                    value={playerPrefs.skipStepSec}
-                    onChange={(e) => setPlayerPrefs((p) => ({ ...p, skipStepSec: Number(e.target.value) }))}
-                  />
-                </label>
-
-                <div>
-                  <button type="button" className="watch-pill" onClick={resetShortcuts}>
-                    Reset keyboard shortcuts
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {showSection('captions') && (
-            <section id="settings-captions" style={{ scrollMarginTop: 84, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <Captions size={18} />
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{t('settings.captions')}</h2>
-              </div>
-              <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Live Subtitle Preview Box */}
-                <div
-                  style={{
-                    position: 'relative',
-                    height: 120,
-                    borderRadius: 12,
-                    background: 'linear-gradient(135deg, #1b2234, #0e1017)',
-                    display: 'grid',
-                    placeItems: 'end center',
-                    padding: 18,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <span
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: 6,
-                      fontFamily:
-                        captionPrefs.fontFamily === 'serif'
-                          ? 'Georgia, serif'
-                          : captionPrefs.fontFamily === 'mono'
-                            ? 'monospace'
-                            : 'var(--font-sans)',
-                      fontSize:
-                        captionPrefs.fontSize === 'small'
-                          ? 14
-                          : captionPrefs.fontSize === 'large'
-                            ? 22
-                            : captionPrefs.fontSize === 'xlarge'
-                              ? 26
-                              : 18,
-                      fontWeight: captionPrefs.fontWeight === 'bold' ? 700 : 400,
-                      fontStyle: captionPrefs.italic ? 'italic' : 'normal',
-                      textTransform: captionPrefs.uppercase ? 'uppercase' : 'none',
-                      color: captionPrefs.fontColor,
-                      backgroundColor:
-                        captionPrefs.bgOpacity === 'none'
-                          ? 'transparent'
-                          : captionPrefs.bgOpacity === 'subtle'
-                            ? 'rgba(0,0,0,0.35)'
-                            : captionPrefs.bgOpacity === 'medium'
-                              ? 'rgba(0,0,0,0.62)'
-                              : 'rgba(0,0,0,0.85)',
-                      textShadow: captionPrefs.edgeStyle === 'none' ? 'none' : '0 2px 6px rgba(0,0,0,0.9)',
-                    }}
-                  >
-                    The Grand Line awaits beyond Reverse Mountain.
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                  <label style={{ fontSize: 13 }}>
-                    Font size
-                    <select
-                      className="watch-panel__select"
-                      style={{ marginTop: 6 }}
-                      value={captionPrefs.fontSize}
-                      onChange={(e) =>
-                        setCaptionPrefs((p) => ({ ...p, fontSize: e.target.value as typeof p.fontSize }))
-                      }
-                    >
-                      <option value="small">Small</option>
-                      <option value="normal">Normal</option>
-                      <option value="large">Large</option>
-                      <option value="xlarge">Extra Large</option>
-                    </select>
-                  </label>
-
-                  <label style={{ fontSize: 13 }}>
-                    Background opacity
-                    <select
-                      className="watch-panel__select"
-                      style={{ marginTop: 6 }}
-                      value={captionPrefs.bgOpacity}
-                      onChange={(e) =>
-                        setCaptionPrefs((p) => ({ ...p, bgOpacity: e.target.value as typeof p.bgOpacity }))
-                      }
-                    >
-                      <option value="none">None</option>
-                      <option value="subtle">Subtle</option>
-                      <option value="medium">Medium</option>
-                      <option value="strong">Strong</option>
-                    </select>
-                  </label>
-
-                  <label style={{ fontSize: 13 }}>
-                    Font color
-                    <div style={{ marginTop: 6 }}>
-                      <input
-                        type="color"
-                        value={captionPrefs.fontColor}
-                        onChange={(e) => setCaptionPrefs((p) => ({ ...p, fontColor: e.target.value }))}
-                      />
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </section>
-          )}
-
           {showSection('notifications') && (
             <section id="settings-notifications" style={{ scrollMarginTop: 84, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -684,6 +556,205 @@ export const SettingsPage: React.FC = () => {
                     }
                   />
                 </label>
+              </div>
+            </section>
+          )}
+
+          {showSection('discord') && (
+            <section id="settings-discord" style={{ scrollMarginTop: 84, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <Radio size={18} />
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Discord Rich Presence</h2>
+              </div>
+              <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: 'rgb(var(--c-text2))', lineHeight: 1.5 }}>
+                  Display the anime currently playing on 7Anime in your Discord profile activity via the local desktop companion. Runs 100% locally with zero cloud database requests.
+                </p>
+
+                {/* Connection Status Indicator */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid rgba(255, 255, 255, 0.07)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor:
+                          !discordPrefs.enabled
+                            ? 'rgba(255, 255, 255, 0.3)'
+                            : presenceState.status === 'CONNECTED' && presenceState.discordConnected
+                              ? '#22c55e'
+                              : presenceState.status === 'CONNECTED'
+                                ? '#eab308'
+                                : presenceState.status === 'CONNECTING'
+                                  ? '#3b82f6'
+                                  : 'rgba(255, 255, 255, 0.4)',
+                        boxShadow:
+                          presenceState.status === 'CONNECTED' && presenceState.discordConnected
+                            ? '0 0 10px rgba(34, 197, 94, 0.5)'
+                            : 'none',
+                      }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+                        {!discordPrefs.enabled
+                          ? 'Presence Disabled (Opt-in)'
+                          : presenceState.status === 'CONNECTING'
+                            ? 'Connecting to Companion...'
+                            : presenceState.status === 'CONNECTED' && presenceState.discordConnected
+                              ? `Connected · Discord @${presenceState.discordUser?.username || 'Active'}`
+                              : presenceState.status === 'CONNECTED'
+                                ? 'Companion Connected · Discord Desktop Not Detected'
+                                : 'Companion Offline · Local Desktop Bridge Not Running'}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: 'rgb(var(--c-text3))' }}>
+                        {!discordPrefs.enabled
+                          ? 'Enable below to start sharing activity.'
+                          : presenceState.status === 'CONNECTED' && presenceState.discordConnected
+                            ? 'Live Rich Presence updates will sync automatically during playback.'
+                            : presenceState.status === 'CONNECTED'
+                              ? 'Please launch Discord desktop client on your PC to show presence.'
+                              : 'Launch companion via "npm run companion" on your machine.'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {discordPrefs.enabled && presenceState.status === 'DISCONNECTED' && (
+                    <button
+                      type="button"
+                      className="watch-pill"
+                      style={{ height: 28, fontSize: 12, padding: '0 12px' }}
+                      onClick={() => discordPresenceService.connect()}
+                    >
+                      Retry
+                    </button>
+                  )}
+                </div>
+
+                {/* Preference Toggles */}
+                <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13.5, cursor: 'pointer' }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Enable Discord Presence</div>
+                    <div style={{ fontSize: 11.5, color: 'rgb(var(--c-text3))' }}>Allow local companion to broadcast your viewing activity</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={discordPrefs.enabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setDiscordPrefs((p) => ({ ...p, enabled }));
+                      showToast(enabled ? 'Discord Presence enabled' : 'Discord Presence disabled');
+                    }}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: 13.5,
+                    cursor: discordPrefs.enabled ? 'pointer' : 'not-allowed',
+                    opacity: discordPrefs.enabled ? 1 : 0.5,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Automatically share current anime</div>
+                    <div style={{ fontSize: 11.5, color: 'rgb(var(--c-text3))' }}>Update Discord activity as soon as video playback starts</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    disabled={!discordPrefs.enabled}
+                    checked={discordPrefs.autoShare}
+                    onChange={(e) => setDiscordPrefs((p) => ({ ...p, autoShare: e.target.checked }))}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: 13.5,
+                    cursor: discordPrefs.enabled ? 'pointer' : 'not-allowed',
+                    opacity: discordPrefs.enabled ? 1 : 0.5,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Hide anime title</div>
+                    <div style={{ fontSize: 11.5, color: 'rgb(var(--c-text3))' }}>Shows generic "Watching Anime" instead of specific title</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    disabled={!discordPrefs.enabled}
+                    checked={discordPrefs.hideTitle}
+                    onChange={(e) => setDiscordPrefs((p) => ({ ...p, hideTitle: e.target.checked }))}
+                  />
+                </label>
+
+                <label
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: 13.5,
+                    cursor: discordPrefs.enabled ? 'pointer' : 'not-allowed',
+                    opacity: discordPrefs.enabled ? 1 : 0.5,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Hide episode information</div>
+                    <div style={{ fontSize: 11.5, color: 'rgb(var(--c-text3))' }}>Hides season and episode counts from your activity</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    disabled={!discordPrefs.enabled}
+                    checked={discordPrefs.hideEpisode}
+                    onChange={(e) => setDiscordPrefs((p) => ({ ...p, hideEpisode: e.target.checked }))}
+                  />
+                </label>
+
+                {/* Companion Action Button & Setup Guide */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, paddingTop: 4 }}>
+                  <button
+                    type="button"
+                    className="watch-pill"
+                    onClick={() => {
+                      discordPresenceService.clearActivity();
+                      discordPresenceService.disconnect();
+                      showToast('Discord activity cleared');
+                    }}
+                  >
+                    Disconnect & Clear Activity
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px dashed rgba(255, 255, 255, 0.1)',
+                    fontSize: 12,
+                    color: 'rgb(var(--c-text3))',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <strong style={{ color: 'rgb(var(--c-text1))' }}>How to launch the Companion:</strong>
+                  <br />
+                  Run <code style={{ color: 'var(--c-accent, #b29ce0)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4 }}>npm run companion</code> in your terminal on this computer. It connects to your Discord desktop client over local named pipes.
+                </div>
               </div>
             </section>
           )}
@@ -722,6 +793,102 @@ export const SettingsPage: React.FC = () => {
                     onClick={resetDeviceData}
                   >
                     Reset all device data
+                  </button>
+                </div>
+              </div>
+
+              {/* Centralized Intelligent Cache Diagnostics Card */}
+              <div className="settings-card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Database size={16} style={{ color: 'rgb(var(--c-accent))' }} />
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>
+                      Intelligent Cache System (L1 Memory & L2 IndexedDB)
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 12,
+                      background: 'rgba(var(--c-accent), 0.15)',
+                      color: 'rgb(var(--c-accent))',
+                    }}
+                  >
+                    Hit Ratio: {cacheStats.hitRatio}%
+                  </span>
+                </div>
+
+                <p style={{ margin: 0, fontSize: 13, color: 'rgb(var(--c-text2))' }}>
+                  Multi-tier caching prevents duplicate network requests, accelerates page navigation with Stale-While-Revalidate, and persists public metadata across browser sessions.
+                </p>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>L1 Memory Hits</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cacheStats.hitsL1}</div>
+                  </div>
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>L2 Persistent Hits</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cacheStats.hitsL2}</div>
+                  </div>
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>Deduplicated</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cacheStats.deduplications}</div>
+                  </div>
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>SWR Refreshes</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cacheStats.revalidations}</div>
+                  </div>
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>Cache Entries</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{cacheStats.entryCountL1}</div>
+                  </div>
+                  <div style={{ padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize: 11, color: 'rgb(var(--c-text2))' }}>Estimated Size</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>
+                      {(cacheStats.bytesEstimate / 1024).toFixed(1)} KB
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="watch-pill"
+                    onClick={async () => {
+                      await cacheManager.clear();
+                      showToast('Cache purged successfully');
+                    }}
+                  >
+                    Purge All Cache
+                  </button>
+                  <button
+                    type="button"
+                    className="watch-pill"
+                    onClick={async () => {
+                      const purged = await cacheManager.invalidateByPrefix('anime:search:');
+                      showToast(`Purged ${purged} search cache entries`);
+                    }}
+                  >
+                    Purge Search Cache
+                  </button>
+                  <button
+                    type="button"
+                    className="watch-pill"
+                    onClick={() => {
+                      imageTracker.clear();
+                      showToast('Image negative cache reset');
+                    }}
+                  >
+                    Reset Broken Image Tracker
                   </button>
                 </div>
               </div>

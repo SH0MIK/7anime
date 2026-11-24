@@ -23,7 +23,7 @@ export const CANONICAL_OVERRIDES: Record<number, { tmdbId: number; mediaType: 't
   1735: { tmdbId: 31910, mediaType: 'tv' }, // Naruto Shippuden
   223: { tmdbId: 12609, mediaType: 'tv' }, // Dragon Ball
   813: { tmdbId: 12971, mediaType: 'tv' }, // Dragon Ball Z
-  21175: { tmdbId: 62710, mediaType: 'tv' }, // Dragon Ball Super
+  21175: { tmdbId: 62715, mediaType: 'tv' }, // Dragon Ball Super (TMDB 62715 = Dragon Ball Chou / Super)
   269: { tmdbId: 30984, mediaType: 'tv' }, // Bleach
   116674: { tmdbId: 30984, mediaType: 'tv' }, // Bleach: Thousand-Year Blood War
   114446: { tmdbId: 30984, mediaType: 'tv' }, // Bleach: TYBW Alternate ID

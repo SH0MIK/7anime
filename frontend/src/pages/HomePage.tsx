@@ -797,10 +797,6 @@ export const HomePage: React.FC = () => {
                 <span>{t('home.comments')}</span>
               </h2>
             </div>
-            <Link to="/community" className="row-view-all">
-              <span>{t('home.viewAll')}</span>
-              <ChevronRight size={15} />
-            </Link>
           </div>
 
           <div className="home-comments-grid">

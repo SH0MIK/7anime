@@ -1,4 +1,5 @@
 import type { AniListGraphQLResponse } from './types';
+import { cacheManager } from '../cache';
 
 export class AniListError extends Error {
   public status?: number;
@@ -22,18 +23,9 @@ interface CacheEntry<T> {
 export class AniListClient {
   private static instance: AniListClient;
   private readonly endpoint = 'https://graphql.anilist.co';
-  private readonly inFlight = new Map<string, Promise<any>>();
-  private readonly cache = new Map<string, CacheEntry<any>>();
+  private readonly defaultTtlMs = 30 * 60 * 1000; // 30 minutes default
 
-  // Cache TTLs
-  private readonly defaultTtlMs = 15 * 60 * 1000; // 15 minutes default
-
-  private constructor() {
-    // Periodic cache sweep every 5 minutes
-    if (typeof window !== 'undefined') {
-      window.setInterval(() => this.sweepExpiredCache(), 5 * 60 * 1000);
-    }
-  }
+  private constructor() {}
 
   public static getInstance(): AniListClient {
     if (!AniListClient.instance) {
@@ -43,7 +35,8 @@ export class AniListClient {
   }
 
   /**
-   * Executes a typed GraphQL query against AniList with caching, deduplication, and retry.
+   * Executes a typed GraphQL query against AniList with multi-tier caching,
+   * in-flight deduplication, and Stale-While-Revalidate (SWR).
    */
   public async query<T>(
     query: string,
@@ -55,43 +48,32 @@ export class AniListClient {
       maxRetries?: number;
     } = {}
   ): Promise<T> {
-    const cacheKey = `${query.trim()}::${JSON.stringify(variables)}`;
+    const cacheKey = `anilist:graphql:${query.trim()}::${JSON.stringify(variables)}`;
 
-    // 1. Check in-memory cache
-    if (!options.skipCache) {
-      const cached = this.cache.get(cacheKey);
-      if (cached && Date.now() < cached.expiresAt) {
-        return cached.data as T;
+    if (options.skipCache) {
+      return this.executeWithRetry<T>(
+        query,
+        variables,
+        options.timeoutMs ?? 15000,
+        options.maxRetries ?? 2
+      );
+    }
+
+    return cacheManager.getOrFetch<T>(
+      cacheKey,
+      () =>
+        this.executeWithRetry<T>(
+          query,
+          variables,
+          options.timeoutMs ?? 15000,
+          options.maxRetries ?? 2
+        ),
+      {
+        ttlMs: options.ttlMs ?? this.defaultTtlMs,
+        staleTtlMs: 24 * 60 * 60 * 1000, // 24 hours SWR window
+        tags: ['anilist:graphql'],
       }
-    }
-
-    // 2. Check in-flight requests for deduplication
-    if (this.inFlight.has(cacheKey)) {
-      return this.inFlight.get(cacheKey)! as Promise<T>;
-    }
-
-    // 3. Initiate request with retry & timeout
-    const executionPromise = this.executeWithRetry<T>(
-      query,
-      variables,
-      options.timeoutMs ?? 15000,
-      options.maxRetries ?? 2
-    )
-      .then((data) => {
-        // Cache successful response
-        const ttl = options.ttlMs ?? this.defaultTtlMs;
-        this.cache.set(cacheKey, {
-          data,
-          expiresAt: Date.now() + ttl,
-        });
-        return data;
-      })
-      .finally(() => {
-        this.inFlight.delete(cacheKey);
-      });
-
-    this.inFlight.set(cacheKey, executionPromise);
-    return executionPromise;
+    );
   }
 
   private async executeWithRetry<T>(
@@ -188,17 +170,8 @@ export class AniListClient {
     }
   }
 
-  private sweepExpiredCache(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now >= entry.expiresAt) {
-        this.cache.delete(key);
-      }
-    }
-  }
-
-  public clearCache(): void {
-    this.cache.clear();
+  public async clearCache(): Promise<void> {
+    await cacheManager.invalidateByTag('anilist:graphql');
   }
 }
 

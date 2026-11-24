@@ -49,6 +49,17 @@ export class MemoryCacheService {
     return this.cache.delete(key);
   }
 
+  public deleteByPrefix(prefix: string): number {
+    let count = 0;
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key);
+        count++;
+      }
+    }
+    return count;
+  }
+
   public clear(): void {
     this.cache.clear();
   }

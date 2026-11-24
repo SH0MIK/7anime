@@ -29,7 +29,7 @@ export const AboutPage: React.FC = () => (
         <section id="player">
           <h2>GlassPlayer engine</h2>
           <p style={{ color: 'rgb(var(--c-text2))' }}>
-            Built with multi-audio Sub &amp; Dub stream switching, custom ASS/VTT subtitle styling, keyboard shortcuts, Theater mode, Lights off dimming, and Ambient glow backlighting.
+            Built with multi-audio Sub &amp; Dub stream switching, custom ASS/VTT subtitle styling, Theater mode, Lights off dimming, and Ambient glow backlighting.
           </p>
         </section>
         <section id="privacy">

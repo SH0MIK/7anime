@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowDownUp,
@@ -25,7 +25,6 @@ import type { ResolvedAnime, AnimeEpisodeCatalogue } from '@7anime/shared';
 import { useAiringCountdown } from '@/src/utils/useAiringCountdown';
 import { useApp } from '@/src/context/AppContext';
 import {
-  MANGA_CATALOG,
   STILLS_POOL,
   getDisplayTitle,
 } from '@/src/data/catalogService';
@@ -42,7 +41,7 @@ import { EpisodeThumbnail } from '@/src/components/EpisodeThumbnail';
 import { ErrorState } from '@/src/components/Skeletons';
 import type { AnimeTitle, CommentItem, EpisodeItem, EpisodeKind } from '@/src/types/anime';
 
-type DetailTab = 'episodes' | 'related' | 'manga' | 'similar' | 'comments' | 'downloads';
+type DetailTab = 'episodes' | 'related' | 'similar' | 'comments' | 'downloads';
 
 /**
  * Extracts a numeric AniList ID from various slug patterns:
@@ -77,11 +76,20 @@ export const AnimeDetailPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [logoError, setLogoError] = useState(false);
+  const requestIdRef = useRef(0);
 
   async function loadDetailData() {
+    const currentRequestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     setLogoError(false);
+    // Explicitly reset prior anime state to prevent cross-anime leakage during navigation
+    setAnime(null);
+    setResolvedAnime(null);
+    setArtwork(null);
+    setEpisodesData(null);
+    setLiveRelations([]);
+    setLiveRecommendations([]);
 
     // 1. Extract or search AniList ID
     let targetId = extractAniListId(id);
@@ -111,10 +119,13 @@ export const AnimeDetailPage: React.FC = () => {
         apiClient.getLogo(targetId),
       ]);
 
+      if (currentRequestId !== requestIdRef.current) return;
+
       const backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
       const anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
       const catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
-      const directLogo = logoResult.status === 'fulfilled' ? logoResult.value?.logoUrl : undefined;
+      const logoData = logoResult.status === 'fulfilled' ? logoResult.value : null;
+      const directLogo = (logoData && logoData.verificationStatus !== 'rejected') ? logoData.logoUrl : undefined;
       if (catData) {
         setEpisodesData(catData);
       }
@@ -168,7 +179,8 @@ export const AnimeDetailPage: React.FC = () => {
         setArtwork(resolvedArt);
         if (resolvedArt.poster) base.poster = resolvedArt.poster;
         if (resolvedArt.backdrop) base.banner = resolvedArt.backdrop;
-        if (resolvedArt.logo || directLogo) base.logo = resolvedArt.logo || directLogo;
+        const chosenLogo = directLogo || (resolvedArt.logo && resolvedArt.logoSource === 'tmdb' ? resolvedArt.logo : undefined);
+        if (chosenLogo) base.logo = chosenLogo;
         if (resolvedArt.trailer) base.trailer = resolvedArt.trailer;
       } else if (directLogo) {
         base.logo = directLogo;
@@ -189,32 +201,66 @@ export const AnimeDetailPage: React.FC = () => {
   }, [id]);
 
   const allEpisodes: EpisodeItem[] = useMemo(() => {
-    if (!episodesData?.episodes || episodesData.episodes.length === 0) {
-      return [];
+    // 1. If backend resolved catalogue has episodes, map them
+    if (episodesData?.episodes && episodesData.episodes.length > 0) {
+      return episodesData.episodes.map((ep) => {
+        let kind: EpisodeKind = 'unknown';
+        if (ep.classification) {
+          kind = ep.classification.toLowerCase() as EpisodeKind;
+        } else if (ep.isFiller === true) {
+          kind = 'filler';
+        }
+        return {
+          number: ep.number,
+          title: ep.title || `Episode ${ep.number}`,
+          synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+          aired: ep.airDate || `${anime?.year || ''}`,
+          duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+          durationSec: ep.duration ? ep.duration * 60 : 1440,
+          hasSub: Boolean(ep.hasSub),
+          hasDub: Boolean(ep.hasDub),
+          kind,
+          classificationSource: ep.classificationSource,
+          arc: 'Season 1',
+          season: 1,
+          thumbnail: ep.thumbnail || anime?.banner || anime?.cover || null,
+          source: ep.source,
+          metadataVerified: ep.metadataVerified,
+          isPlayable: ep.isPlayable,
+        };
+      });
     }
-    return episodesData.episodes.map((ep) => {
-      let kind: EpisodeKind = 'unknown';
-      if (ep.classification) {
-        kind = ep.classification.toLowerCase() as EpisodeKind;
-      } else if (ep.isFiller === true) {
-        kind = 'filler';
-      }
-      return {
-        number: ep.number,
-        title: ep.title || `Episode ${ep.number}`,
-        synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
-        aired: ep.airDate || `${anime?.year || ''}`,
-        duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
-        durationSec: ep.duration ? ep.duration * 60 : 1440,
-        hasSub: true,
-        hasDub: Boolean(ep.hasDub),
-        kind,
-        classificationSource: ep.classificationSource,
-        arc: 'Season 1',
-        season: 1,
-        thumbnail: ep.thumbnail || null,
-      };
-    });
+
+    // 2. Client-side Guaranteed Fallback:
+    // If backend catalogue returned 0 records or is resolving/stale, but the anime is confirmed finished or has known aired count:
+    const expectedCount = episodesData?.airedEpisodeCount || episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
+    const isCompleted = anime?.status === 'FINISHED' || (!anime?.status && expectedCount > 0);
+    if (expectedCount > 0 && isCompleted) {
+      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()}m` : '24m';
+      return Array.from({ length: expectedCount }, (_, i) => {
+        const num = i + 1;
+        return {
+          number: num,
+          title: `Episode ${num}`,
+          synopsis: `Episode ${num} of ${anime?.title || 'the series'}.`,
+          aired: anime?.year ? `${anime.year}` : '',
+          duration: cleanDur,
+          durationSec: 1440,
+          hasSub: false,
+          hasDub: false,
+          kind: 'unknown' as EpisodeKind,
+          classificationSource: 'generated_fallback',
+          arc: 'Season 1',
+          season: 1,
+          thumbnail: anime?.banner || anime?.cover || null,
+          source: 'GENERATED_FALLBACK',
+          metadataVerified: false,
+          isPlayable: false,
+        };
+      });
+    }
+
+    return [];
   }, [episodesData, anime]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('episodes');
@@ -355,6 +401,7 @@ export const AnimeDetailPage: React.FC = () => {
         {/* Cinematic Trailer Background with Seamless Fallback */}
         <CinematicTrailerBackground
           backdropUrl={backdropUrl}
+          posterUrl={anime.poster}
           trailerKey={trailerKey}
           title={displayTitle}
         />
@@ -393,25 +440,35 @@ export const AnimeDetailPage: React.FC = () => {
                         : '—'}
                 </div>
               </div>
-              {episodesData?.airedEpisodeCount != null && (
-                <div>
-                  <div className="detail-sidebar-row__label">Aired Episodes</div>
-                  <div className="detail-sidebar-row__val">
-                    {episodesData.airedEpisodeCount.toLocaleString()}
-                  </div>
+              <div>
+                <div className="detail-sidebar-row__label">Aired Episodes</div>
+                <div className="detail-sidebar-row__val">
+                  {(episodesData?.airedEpisodeCount && episodesData.airedEpisodeCount > 0)
+                    ? episodesData.airedEpisodeCount.toLocaleString()
+                    : allEpisodes.length > 0
+                      ? allEpisodes.length.toLocaleString()
+                      : anime.status === 'FINISHED' && anime.episodeCount > 0
+                        ? anime.episodeCount.toLocaleString()
+                        : episodesData?.airedEpisodeCount === 0
+                          ? '0 (Not Yet Aired)'
+                          : '—'}
                 </div>
-              )}
+              </div>
               <div>
                 <div className="detail-sidebar-row__label">Available Records</div>
                 <div className="detail-sidebar-row__val" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span>{allEpisodes.length.toLocaleString()}</span>
-                  {episodesData?.completenessStatus === 'complete' ? (
+                  <span>{(episodesData?.verifiedRecordsCount ?? allEpisodes.filter(e => e.metadataVerified === true && e.source !== 'GENERATED_FALLBACK').length).toLocaleString()}</span>
+                  {(episodesData?.completenessStatus === 'complete' || (allEpisodes.length > 0 && allEpisodes.every(e => e.metadataVerified === true && e.source !== 'GENERATED_FALLBACK'))) ? (
                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80', fontWeight: 600 }}>
                       Complete
                     </span>
                   ) : episodesData?.completenessStatus === 'partial' ? (
                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(250, 204, 21, 0.15)', color: '#facc15', fontWeight: 600 }}>
                       Partial
+                    </span>
+                  ) : (episodesData?.completenessStatus === 'fallback_generated' || (allEpisodes.length > 0 && allEpisodes.some(e => e.source === 'GENERATED_FALLBACK'))) ? (
+                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 600 }}>
+                      Generated
                     </span>
                   ) : episodesData?.completenessStatus === 'resolving' ? (
                     <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(96, 165, 250, 0.15)', color: '#60a5fa', fontWeight: 600 }}>
@@ -425,9 +482,17 @@ export const AnimeDetailPage: React.FC = () => {
                 </div>
               </div>
               <div>
+                <div className="detail-sidebar-row__label">Playable Episodes</div>
+                <div className="detail-sidebar-row__val">
+                  {allEpisodes.filter(e => e.isPlayable === true).length > 0
+                    ? allEpisodes.filter(e => e.isPlayable === true).length.toLocaleString()
+                    : '0 (Pending)'}
+                </div>
+              </div>
+              <div>
                 <div className="detail-sidebar-row__label">Duration</div>
                 <div className="detail-sidebar-row__val">
-                  {anime.duration ? `${anime.duration} min per episode` : '24 min per episode'}
+                  {anime.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()} min per episode` : '24 min per episode'}
                 </div>
               </div>
               <div>
@@ -711,7 +776,6 @@ export const AnimeDetailPage: React.FC = () => {
                 [
                   { id: 'episodes', label: t('detail.episodes'), count: allEpisodes.length, icon: <List size={14} /> },
                   { id: 'related', label: t('detail.related'), count: relatedTitles.length, icon: <Film size={14} /> },
-                  { id: 'manga', label: t('detail.manga'), count: 6, icon: <BookOpen size={14} /> },
                   { id: 'similar', label: t('detail.moreLikeThis'), icon: <Sparkles size={14} /> },
                   { id: 'comments', label: t('detail.comments'), count: comments.length || undefined, icon: <MessageSquare size={14} /> },
                   { id: 'downloads', label: t('detail.downloads'), icon: <Download size={14} /> },
@@ -884,33 +948,38 @@ export const AnimeDetailPage: React.FC = () => {
                 </div>
 
                 {/* Catalogue Completeness and Count Bar */}
-                {episodesData && (
+                {(episodesData || allEpisodes.length > 0) && (
                   <div style={{ margin: '14px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 14px', borderRadius: 12, background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
                     <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span>
-                        Showing <strong>{filteredEpisodes.length.toLocaleString()}</strong> of <strong>{allEpisodes.length.toLocaleString()}</strong> verified episodes
+                        Showing <strong>{filteredEpisodes.length.toLocaleString()}</strong> of <strong>{allEpisodes.length.toLocaleString()}</strong> catalogue episodes
                       </span>
-                      {episodesData.completenessStatus === 'complete' && (
+                      {(episodesData?.completenessStatus === 'complete' || (allEpisodes.length > 0 && allEpisodes.every((e) => e.metadataVerified === true && e.source !== 'GENERATED_FALLBACK'))) && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80', fontWeight: 600 }}>
                           Complete Verified Catalogue
                         </span>
                       )}
-                      {episodesData.completenessStatus === 'partial' && (
+                      {episodesData?.completenessStatus === 'partial' && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(250, 204, 21, 0.15)', color: '#facc15', fontWeight: 600 }}>
-                          Partial Catalogue ({episodesData.verifiedRecordsCount} of {episodesData.airedEpisodeCount} Aired)
+                          Partial Metadata ({(episodesData.verifiedRecordsCount ?? 0)} of {(episodesData.airedEpisodeCount || allEpisodes.length)} Verified)
                         </span>
                       )}
-                      {episodesData.completenessStatus === 'resolving' && (
+                      {(episodesData?.completenessStatus === 'fallback_generated' || (allEpisodes.length > 0 && allEpisodes.some((e) => e.source === 'GENERATED_FALLBACK') && episodesData?.completenessStatus !== 'partial')) && (
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 600 }}>
+                          Catalogue Available ({allEpisodes.length} Released Episodes)
+                        </span>
+                      )}
+                      {episodesData?.completenessStatus === 'resolving' && allEpisodes.length === 0 && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(96, 165, 250, 0.15)', color: '#60a5fa', fontWeight: 600 }}>
                           Airing Schedule / Upcoming
                         </span>
                       )}
-                      {episodesData.completenessStatus === 'not_applicable' && (
+                      {episodesData?.completenessStatus === 'not_applicable' && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(192, 132, 252, 0.15)', color: '#c084fc', fontWeight: 600 }}>
                           Single Installment Feature
                         </span>
                       )}
-                      {(episodesData.completenessStatus === 'metadata_unavailable' || episodesData.completenessStatus === 'unavailable') && (
+                      {(episodesData?.completenessStatus === 'metadata_unavailable' || episodesData?.completenessStatus === 'unavailable') && allEpisodes.length === 0 && (
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', fontWeight: 600 }}>
                           Detailed Episode Listing Pending
                         </span>
@@ -955,9 +1024,7 @@ export const AnimeDetailPage: React.FC = () => {
                           ? 'This title is scheduled or currently preparing its release. Episode listings and air schedules will appear as broadcast dates approach.'
                           : episodesData?.completenessStatus === 'not_applicable'
                             ? 'This release is a single installment or non-episodic feature.'
-                            : anime?.episodeCount
-                              ? `Total verified episodes: ${anime.episodeCount}. Detailed individual episode breakdown is pending metadata submission from upstream providers.`
-                              : 'No episode records available.'}
+                            : 'No episode records available for this selection.'}
                     </p>
                   </div>
                 ) : gridView ? (
@@ -1052,22 +1119,6 @@ export const AnimeDetailPage: React.FC = () => {
                 {relatedTitles.map((r) => (
                   <AnimeCard key={r.routeId} anime={r} variant="grid" />
                 ))}
-              </div>
-            )}
-
-            {activeTab === 'manga' && (
-              <div className="settings-card" style={{ marginTop: 18 }}>
-                <h3 style={{ margin: '0 0 8px' }}>Read source manga</h3>
-                <p style={{ margin: '0 0 14px', color: 'rgb(var(--c-text2))', fontSize: 13.5 }}>
-                  Jump right into the manga adaptation chapters in the built-in Toonkotsu reader.
-                </p>
-                <Link
-                  to={`/manga/${(MANGA_CATALOG[0]?.slug ?? anime.slug)}/1`}
-                  className="watch-pill"
-                  aria-pressed="true"
-                >
-                  Open Manga Reader
-                </Link>
               </div>
             )}
 

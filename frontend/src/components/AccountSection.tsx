@@ -45,7 +45,7 @@ export const ACCOUNT_SUBS: { id: AccountSub; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'profile', label: 'Profile' },
   { id: 'visibility', label: 'Visibility' },
-  { id: 'connected', label: 'Connected accounts' },
+  { id: 'connected', label: 'Connected Accounts' },
   { id: 'password', label: 'Password' },
   { id: 'devices', label: 'Devices' },
 ];

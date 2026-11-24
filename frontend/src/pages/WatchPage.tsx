@@ -17,11 +17,9 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/src/context/AppContext';
 import {
-  MANGA_CATALOG,
   STILLS_POOL,
 } from '@/src/data/catalogService';
 import {
-  getRelatedMangaForWatch,
   type WatchOrderItem,
 } from '@/src/utils/watchRelations';
 import { GlassPlayer } from '@/src/components/GlassPlayer';
@@ -174,32 +172,64 @@ export const WatchPage: React.FC = () => {
   }, [id]);
 
   const episodes: EpisodeItem[] = useMemo(() => {
-    if (!episodesData?.episodes || episodesData.episodes.length === 0) {
-      return [];
+    if (episodesData?.episodes && episodesData.episodes.length > 0) {
+      return episodesData.episodes.map((ep) => {
+        let kind: EpisodeKind = 'unknown';
+        if (ep.classification) {
+          kind = ep.classification.toLowerCase() as EpisodeKind;
+        } else if (ep.isFiller === true) {
+          kind = 'filler';
+        }
+        return {
+          number: ep.number,
+          title: ep.title || `Episode ${ep.number}`,
+          synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
+          aired: ep.airDate || `${anime?.year || ''}`,
+          duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
+          durationSec: ep.duration ? ep.duration * 60 : 1440,
+          hasSub: Boolean(ep.hasSub),
+          hasDub: Boolean(ep.hasDub),
+          kind,
+          classificationSource: ep.classificationSource,
+          arc: 'Season 1',
+          season: 1,
+          thumbnail: ep.thumbnail || anime?.banner || anime?.cover || null,
+          source: ep.source,
+          metadataVerified: ep.metadataVerified,
+          isPlayable: ep.isPlayable,
+        };
+      });
     }
-    return episodesData.episodes.map((ep) => {
-      let kind: EpisodeKind = 'unknown';
-      if (ep.classification) {
-        kind = ep.classification.toLowerCase() as EpisodeKind;
-      } else if (ep.isFiller === true) {
-        kind = 'filler';
-      }
-      return {
-        number: ep.number,
-        title: ep.title || `Episode ${ep.number}`,
-        synopsis: ep.overview || `Episode ${ep.number} of ${anime?.title || 'the series'}.`,
-        aired: ep.airDate || `${anime?.year || ''}`,
-        duration: ep.duration ? `${ep.duration}m` : (anime?.duration != null ? `${anime.duration}m` : '24m'),
-        durationSec: ep.duration ? ep.duration * 60 : 1440,
-        hasSub: true,
-        hasDub: Boolean(ep.hasDub),
-        kind,
-        classificationSource: ep.classificationSource,
-        arc: 'Season 1',
-        season: 1,
-        thumbnail: ep.thumbnail || null,
-      };
-    });
+
+    // Client-side Guaranteed Fallback:
+    const expectedCount = episodesData?.airedEpisodeCount || episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
+    const isCompleted = anime?.status === 'FINISHED' || (!anime?.status && expectedCount > 0);
+    if (expectedCount > 0 && isCompleted) {
+      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()}m` : '24m';
+      return Array.from({ length: expectedCount }, (_, i) => {
+        const num = i + 1;
+        return {
+          number: num,
+          title: `Episode ${num}`,
+          synopsis: `Episode ${num} of ${anime?.title || 'the series'}.`,
+          aired: anime?.year ? `${anime.year}` : '',
+          duration: cleanDur,
+          durationSec: 1440,
+          hasSub: false,
+          hasDub: false,
+          kind: 'unknown' as EpisodeKind,
+          classificationSource: 'generated_fallback',
+          arc: 'Season 1',
+          season: 1,
+          thumbnail: anime?.banner || anime?.cover || null,
+          source: 'GENERATED_FALLBACK',
+          metadataVerified: false,
+          isPlayable: false,
+        };
+      });
+    }
+
+    return [];
   }, [episodesData, anime]);
 
   const rawEp = epParam ?? searchParams.get('ep') ?? '1';
@@ -246,10 +276,6 @@ export const WatchPage: React.FC = () => {
   }, [anime, liveRelations]);
 
   const relatedAnime = liveRelations;
-  const relatedManga = useMemo(
-    () => (anime ? getRelatedMangaForWatch(anime, MANGA_CATALOG, 6) : []),
-    [anime]
-  );
 
   useEffect(() => {
     if (audioMode === 'dub' && !currentEpisode.hasDub && currentEpisode.hasSub) {
@@ -581,7 +607,7 @@ export const WatchPage: React.FC = () => {
                 skipFiller={skipFiller}
                 onToggleSkipFiller={() => setSkipFiller((p) => !p)}
               />
-              <WatchSidebarExtras relatedAnime={relatedAnime} relatedManga={relatedManga} />
+              <WatchSidebarExtras relatedAnime={relatedAnime} />
             </div>
           )}
         </div>
@@ -595,7 +621,7 @@ export const WatchPage: React.FC = () => {
               skipFiller={skipFiller}
               onToggleSkipFiller={() => setSkipFiller((p) => !p)}
             />
-            <WatchSidebarExtras relatedAnime={relatedAnime} relatedManga={relatedManga} />
+            <WatchSidebarExtras relatedAnime={relatedAnime} />
           </div>
         )}
 

@@ -393,6 +393,26 @@
   margin-bottom: 10px;
 }
 
+/* ---------- Accordion submenu for settings ---------- */
+.pf-nav__accordion {
+  overflow: hidden;
+  transition: max-height 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+
+.pf-nav__accordion[data-expanded="false"] {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.pf-nav__accordion[data-expanded="true"] {
+  max-height: 350px;
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
 .pf-nav__sub {
   display: flex;
   align-items: center;
@@ -877,6 +897,14 @@ html[data-theme-mode='light'] .pf-dot.is-selected {
   }
 
   .pf-nav__subs {
+    display: contents;
+  }
+
+  .pf-nav__accordion[data-expanded="false"] {
+    display: none !important;
+  }
+
+  .pf-nav__accordion[data-expanded="true"] {
     display: contents;
   }
 }

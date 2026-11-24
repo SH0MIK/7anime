@@ -204,13 +204,18 @@ export const BROWSE_ANIME_QUERY = `
     $page: Int
     $perPage: Int
     $search: String
+    $id_in: [Int]
     $genre_in: [String]
     $tag_in: [String]
     $format: MediaFormat
     $format_in: [MediaFormat]
     $status: MediaStatus
+    $status_in: [MediaStatus]
     $season: MediaSeason
     $seasonYear: Int
+    $averageScore_greater: Int
+    $episodes_greater: Int
+    $countryOfOrigin: CountryCode
     $sort: [MediaSort]
   ) {
     Page(page: $page, perPage: $perPage) {
@@ -224,16 +229,64 @@ export const BROWSE_ANIME_QUERY = `
       media(
         type: ANIME
         search: $search
+        id_in: $id_in
         genre_in: $genre_in
         tag_in: $tag_in
         format: $format
         format_in: $format_in
         status: $status
+        status_in: $status_in
         season: $season
         seasonYear: $seasonYear
+        averageScore_greater: $averageScore_greater
+        episodes_greater: $episodes_greater
+        countryOfOrigin: $countryOfOrigin
         sort: $sort
+        isAdult: false
       ) {
         ${MEDIA_CARD_FRAGMENT}
+      }
+    }
+  }
+`;
+
+/**
+ * Verified production studio media query.
+ */
+export const STUDIO_MEDIA_QUERY = `
+  query GetStudioMedia($studio: String) {
+    Studio(search: $studio) {
+      id
+      name
+      media(perPage: 100, isMain: true, sort: POPULARITY_DESC) {
+        nodes {
+          id
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * Weekly airing schedule query with unified media fragment.
+ */
+export const WEEKLY_AIRING_SCHEDULE_QUERY = `
+  query GetWeeklyAiringSchedule($start: Int, $end: Int, $page: Int = 1, $perPage: Int = 50) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        total
+        currentPage
+        lastPage
+        hasNextPage
+      }
+      airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: [TIME]) {
+        id
+        airingAt
+        timeUntilAiring
+        episode
+        media {
+          ${MEDIA_CARD_FRAGMENT}
+        }
       }
     }
   }

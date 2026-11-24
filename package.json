@@ -6,7 +6,8 @@
   "workspaces": [
     "frontend",
     "backend",
-    "shared"
+    "shared",
+    "companion"
   ],
   "engines": {
     "node": ">=22 <23"
@@ -14,14 +15,19 @@
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
+    "dev:companion": "npm run dev --prefix companion",
+    "companion": "npm run dev --prefix companion",
     "build:shared": "npm run build --prefix shared",
     "build:backend": "npm run build:shared && npm run build --prefix backend",
     "build:frontend": "npm run build:shared && npm run build --prefix frontend",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build:companion": "npm run build:shared && npm run build --prefix companion",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:companion",
     "start:backend": "node backend/dist/server.js",
+    "start:companion": "node companion/dist/index.js",
     "preview:frontend": "npm run preview --prefix frontend",
     "typecheck:frontend": "npm run build --prefix frontend",
     "typecheck:backend": "npm run typecheck --prefix backend",
-    "typecheck": "npm run typecheck:backend && npm run typecheck:frontend"
+    "typecheck:companion": "npm run typecheck --prefix companion",
+    "typecheck": "npm run typecheck:backend && npm run typecheck:frontend && npm run typecheck:companion"
   }
 }

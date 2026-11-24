@@ -53,7 +53,7 @@ export const ProfilePage: React.FC = () => {
         bannerUrl: null,
         banner: null,
         frameStyle: 'none',
-        bio: 'Member of the 7Anime community.',
+        bio: '7Anime member.',
         level: 0,
         xp: 0,
         nextLevelXp: 75,

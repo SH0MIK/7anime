@@ -1,7 +1,9 @@
 import { AnimeLogoResult } from '@7anime/shared';
+import { AniListProvider, AniListMedia } from '../providers/anilist.provider.js';
 import { TmdbProvider, TmdbImagesResponse, TmdbImageItem, TMDB_IMAGE_ORIGINAL } from '../providers/tmdb.provider.js';
 import { ExternalIdResolverService, ResolvedExternalIds } from './external-id-resolver.service.js';
 import { CANONICAL_OVERRIDES } from './anime-matcher.service.js';
+import { AnimeIdentityValidator } from './anime-identity-validator.service.js';
 import { redisCache } from '../../cache/redis-cache.service.js';
 
 interface CachedLogoPayload {
@@ -12,32 +14,35 @@ interface CachedLogoPayload {
 
 const inFlightLogoRequests = new Map<number, Promise<AnimeLogoResult | null>>();
 const LOGO_CACHE_TTL = 86400 * 30; // 30 days
-const LOGO_NEGATIVE_TTL = 900; // 15 minutes (short negative TTL prevents long-term cache poisoning)
+const LOGO_NEGATIVE_TTL = 900; // 15 minutes (prevents long-term cache poisoning)
 
 export class LogoResolverService {
   /**
-   * Resolves the genuine transparent PNG title logo from TMDB for an anime.
+   * Resolves the genuine verified transparent PNG title logo from TMDB for an anime.
+   * Cross-verifies entity identity and attaches full provenance.
    */
   public static async resolveLogo(
     anilistId: number,
     hintTmdbId?: number,
     hintMediaType?: 'tv' | 'movie',
-    prefetchedLogos?: TmdbImageItem[]
+    prefetchedLogos?: TmdbImageItem[],
+    animeMedia?: AniListMedia
   ): Promise<AnimeLogoResult | null> {
     if (!Number.isInteger(anilistId) || anilistId <= 0) {
       return null;
     }
 
-    // Versioned cache key (v2) to immediately bypass any historical 7-day negative cache
-    const cacheKey = `anime:logo:v2:${anilistId}`;
+    // Versioned cache key (v10) to immediately bypass any historical misattributed logos (e.g. Blindspot)
+    const cacheKey = `anime:logo:v10:${anilistId}`;
+    void redisCache.del(`anime:logo:${anilistId}`);
+    void redisCache.del(`anime:logo:v2:${anilistId}`);
+    void redisCache.del(`anime:logo:v3:${anilistId}`);
 
     // 1. Check Redis Cache
     try {
       const cached = await redisCache.get<CachedLogoPayload>(cacheKey);
       if (cached) {
         if (cached.notFound) {
-          // When non-empty prefetchedLogos are supplied, do not immediately return null;
-          // allow the supplied prefetched logos to be evaluated.
           if (!prefetchedLogos || prefetchedLogos.length === 0) {
             return null;
           }
@@ -57,6 +62,12 @@ export class LogoResolverService {
 
     const resolutionPromise = (async (): Promise<AnimeLogoResult | null> => {
       try {
+        // Resolve AniList media metadata if not supplied
+        let media = animeMedia;
+        if (!media) {
+          media = (await AniListProvider.getAnimeById(anilistId)) || undefined;
+        }
+
         let tmdbId = hintTmdbId;
         let mediaType = hintMediaType;
 
@@ -65,6 +76,12 @@ export class LogoResolverService {
           if (CANONICAL_OVERRIDES[anilistId]) {
             tmdbId = CANONICAL_OVERRIDES[anilistId].tmdbId;
             mediaType = CANONICAL_OVERRIDES[anilistId].mediaType;
+          } else if (media) {
+            const extIds = await ExternalIdResolverService.resolveFromMedia(media);
+            if (extIds && extIds.tmdbId && extIds.mediaType) {
+              tmdbId = extIds.tmdbId;
+              mediaType = extIds.mediaType;
+            }
           } else {
             const extIds = await ExternalIdResolverService.resolve(anilistId);
             if (extIds && extIds.tmdbId && extIds.mediaType) {
@@ -75,7 +92,6 @@ export class LogoResolverService {
         }
 
         if (!tmdbId || !mediaType) {
-          // Negative cache when no TMDB mapping is found
           void redisCache.set(
             cacheKey,
             { notFound: true, cachedAt: Date.now() },
@@ -84,7 +100,30 @@ export class LogoResolverService {
           return null;
         }
 
-        // Reuse prefetched logos if available, otherwise query TMDB images endpoint
+        // Strict Entity Identity Cross-Verification
+        if (media) {
+          const details = mediaType === 'movie'
+            ? await TmdbProvider.getMovieDetails(tmdbId)
+            : await TmdbProvider.getTvDetails(tmdbId);
+
+          if (details) {
+            const validation = AnimeIdentityValidator.validateTmdbMatch(media, details);
+            if (!validation.isValid) {
+              console.warn(
+                `[LogoResolverService] TMDB ${tmdbId} failed identity validation for anime ${anilistId}: ${validation.reason}`
+              );
+              // Reject candidate: never select a logo from an unrelated media entity
+              void redisCache.set(
+                cacheKey,
+                { notFound: true, cachedAt: Date.now() },
+                LOGO_NEGATIVE_TTL
+              );
+              return null;
+            }
+          }
+        }
+
+        // Fetch candidate logos from TMDB images endpoint if not prefetched
         let logos = prefetchedLogos;
         if (!logos) {
           const images: TmdbImagesResponse | null = mediaType === 'movie'
@@ -102,10 +141,14 @@ export class LogoResolverService {
           return null;
         }
 
-        // Select the highest quality transparent logo matching language priority
-        const bestLogo = TmdbProvider.selectBestLogo(logos);
+        // Validate each candidate logo item (dimensions, transparent PNG, valid aspect ratio)
+        const animeTitle = media?.title?.english || media?.title?.romaji || 'Anime';
+        const validCandidates = logos.filter((logo) => {
+          const check = AnimeIdentityValidator.validateLogoCandidate(logo, animeTitle);
+          return check.isValid;
+        });
 
-        if (!bestLogo) {
+        if (validCandidates.length === 0) {
           void redisCache.set(
             cacheKey,
             { notFound: true, cachedAt: Date.now() },
@@ -114,14 +157,37 @@ export class LogoResolverService {
           return null;
         }
 
-        // Cache valid result in Redis
+        // Select the highest quality transparent logo matching language priority
+        const chosen = TmdbProvider.selectBestLogo(validCandidates);
+        if (!chosen) {
+          void redisCache.set(
+            cacheKey,
+            { notFound: true, cachedAt: Date.now() },
+            LOGO_NEGATIVE_TTL
+          );
+          return null;
+        }
+
+        // Build verified result with complete provenance
+        const verifiedLogo: AnimeLogoResult = {
+          ...chosen,
+          animeId: anilistId,
+          provider: 'tmdb',
+          providerMediaId: tmdbId,
+          artworkType: 'official_logo',
+          resolvedAt: Date.now(),
+          verificationStatus: 'verified',
+          verifiedTitle: animeTitle,
+        };
+
+        // Cache valid verified result in Redis
         void redisCache.set(
           cacheKey,
-          { logo: bestLogo, notFound: false, cachedAt: Date.now() },
+          { logo: verifiedLogo, notFound: false, cachedAt: Date.now() },
           LOGO_CACHE_TTL
         );
 
-        return bestLogo;
+        return verifiedLogo;
       } catch (err) {
         console.warn(`[LogoResolverService] Error resolving logo for AniList ${anilistId}:`, (err as Error).message);
         return null;

@@ -22,7 +22,7 @@ export class ArtworkResolver {
    * Resolves artwork and cinematic assets for a resolved anime record.
    */
   public static resolve(resolved: ResolvedAnime): ComprehensiveArtwork {
-    const cacheKey = `resolved_art:${resolved.id}`;
+    const cacheKey = `resolved_art:v10:${resolved.id}`;
     const cached = artworkMemoryCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return cached.data;

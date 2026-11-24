@@ -7,17 +7,16 @@ import {
   FolderPlus,
   Heart,
   History,
-  BookOpen,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { useApp } from '@/src/context/AppContext';
-import { MANGA_CATALOG, findAnimeByParam } from '@/src/data/catalogService';
+import { findAnimeByParam } from '@/src/data/catalogService';
 import type { WatchStatus } from '@/src/types/user';
 import { AnimeCard } from '@/src/components/AnimeCard';
 import { formatTimeSec } from '@/src/components/BrandMark';
 
-type LibraryTab = 'watchlist' | 'manga' | 'folders' | 'history' | 'liked' | 'watch_time' | 'import';
+type LibraryTab = 'watchlist' | 'folders' | 'history' | 'liked' | 'watch_time' | 'import';
 
 const STATUS_META: { status: WatchStatus; label: string }[] = [
   { status: 'watching', label: 'Watching' },
@@ -40,7 +39,8 @@ export const LibraryPage: React.FC = () => {
   } = useApp();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as LibraryTab | null) ?? 'watchlist';
+  const rawTab = searchParams.get('tab') as LibraryTab | null;
+  const activeTab = rawTab === ('manga' as any) || !rawTab ? 'watchlist' : rawTab;
   const [newFolderName, setNewFolderName] = useState('');
   const [importText, setImportText] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -56,10 +56,6 @@ export const LibraryPage: React.FC = () => {
   const likedAnimes = useMemo(
     () => library.likedIds.map((id) => findAnimeByParam(id)).filter((a): a is NonNullable<typeof a> => Boolean(a)),
     [library.likedIds]
-  );
-  const bookmarkedManga = useMemo(
-    () => MANGA_CATALOG.filter((m) => library.mangaBookmarkedIds.includes(m.id)),
-    [library.mangaBookmarkedIds]
   );
 
   const handleCreateFolder = (e: React.FormEvent) => {
@@ -82,7 +78,6 @@ export const LibraryPage: React.FC = () => {
 
   const tabs: { key: LibraryTab; label: string; count?: number; icon: React.ReactNode }[] = [
     { key: 'watchlist', label: t('library.watchlist'), icon: <Bookmark size={14} /> },
-    { key: 'manga', label: t('library.manga'), count: bookmarkedManga.length || undefined, icon: <BookOpen size={14} /> },
     { key: 'folders', label: t('library.folders'), count: library.folders.length || undefined, icon: <Folder size={14} /> },
     { key: 'history', label: t('library.history'), count: library.history.length || undefined, icon: <History size={14} /> },
     { key: 'liked', label: t('library.liked'), count: likedAnimes.length || undefined, icon: <Heart size={14} /> },
@@ -221,38 +216,6 @@ export const LibraryPage: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {activeTab === 'manga' && (
-        <div>
-          {bookmarkedManga.length === 0 ? (
-            <div className="settings-card" style={{ textAlign: 'center', padding: 48 }}>
-              <h3 style={{ margin: '0 0 8px' }}>No bookmarked manga</h3>
-              <p style={{ margin: '0 0 16px', color: 'rgb(var(--c-text2))' }}>
-                Explore manga series and bookmark favorites to pick up reading quickly.
-              </p>
-              <Link to="/manga" className="watch-pill">
-                Browse Manga
-              </Link>
-            </div>
-          ) : (
-            <div className="browse-grid">
-              {bookmarkedManga.map((m) => (
-                <Link key={m.id} to={`/manga/${m.slug}`} className="ac" style={{ width: '100%' }}>
-                  <div className="ac-poster">
-                    <div className="poster-clip">
-                      <img src={m.cover} alt={m.title} />
-                      <div className="ac-fade" />
-                      <div className="cov-cap">
-                        <span className="cov-title">{m.title}</span>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

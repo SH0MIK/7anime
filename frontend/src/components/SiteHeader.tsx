@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bookmark,
+  Calendar,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -13,7 +14,6 @@ import {
   Flag,
   Globe,
   Home,
-  Keyboard,
   LayoutGrid,
   LogOut,
   MessageSquarePlus,
@@ -57,7 +57,6 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
     setChatOpen,
     chatOpen,
     setAuthOpen,
-    setShortcutsOpen,
     setReportOpen,
     setRequestAnimeOpen,
     library,
@@ -156,6 +155,7 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
   const navLinks = [
     { to: '/', label: t('nav.home'), tier: 1 },
     { to: '/anime', label: t('nav.browse'), tier: 1 },
+    { to: '/schedule', label: t('nav.schedule'), tier: 1 },
     { to: '/latest', label: t('nav.latest'), tier: 1 },
     { to: '/genres', label: t('nav.genres'), tier: 2 },
     { to: '/library', label: t('nav.library'), tier: 1 },
@@ -238,8 +238,8 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
         <button
           type="button"
           className="yt-icon-button"
-          aria-label="Community chat"
-          title="Community chat"
+          aria-label="Live chat"
+          title="Live chat"
           aria-expanded={chatOpen}
           onClick={() => setChatOpen(!chatOpen)}
         >
@@ -350,20 +350,20 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                   <div className="yt-mmenu__section">
                     <div className="yt-mmenu__heading">{t('menu.explore')}</div>
                     <Link
+                      to="/schedule"
+                      className="yt-mmenu__row"
+                      onClick={() => setOptionsOpen(false)}
+                    >
+                      <Calendar size={16} />
+                      <span className="yt-mmenu__label">{t('nav.schedule')}</span>
+                    </Link>
+                    <Link
                       to="/genres"
                       className="yt-mmenu__row"
                       onClick={() => setOptionsOpen(false)}
                     >
                       <LayoutGrid size={16} />
                       <span className="yt-mmenu__label">{t('nav.genres')}</span>
-                    </Link>
-                    <Link
-                      to="/community"
-                      className="yt-mmenu__row"
-                      onClick={() => setOptionsOpen(false)}
-                    >
-                      <Bookmark size={16} />
-                      <span className="yt-mmenu__label">{t('nav.community')}</span>
                     </Link>
                     <Link
                       to="/leaderboard"
@@ -395,17 +395,6 @@ export const SiteHeader: React.FC<SiteHeaderProps> = ({
                     >
                       <Download size={16} />
                       <span className="yt-mmenu__label">{t('menu.installApp')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="yt-mmenu__row"
-                      onClick={() => {
-                        setOptionsOpen(false);
-                        setShortcutsOpen(true);
-                      }}
-                    >
-                      <Keyboard size={16} />
-                      <span className="yt-mmenu__label">{t('menu.keyboardShortcuts')}</span>
                     </button>
                   </div>
 
@@ -706,11 +695,10 @@ export const SiteFooter: React.FC = () => {
 
           <nav className="site-footer__nav site-footer__nav--discover" aria-label="Discover links">
             <Link to="/anime">{t('nav.browse')}</Link>
+            <Link to="/schedule">{t('nav.schedule')}</Link>
             <Link to="/latest">{t('nav.latest')}</Link>
             <Link to="/genres">{t('nav.genres')}</Link>
-            <Link to="/manga">{t('nav.manga')}</Link>
             <Link to="/watch-together">{t('nav.watchTogether')}</Link>
-            <Link to="/community">{t('nav.community')}</Link>
             <Link to="/leaderboard">{t('nav.leaderboard')}</Link>
           </nav>
         </div>

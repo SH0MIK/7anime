@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  Keyboard,
   Loader2,
   Lock,
   Mail,
@@ -834,97 +833,6 @@ export const AuthModal: React.FC = () => {
           </Link>
           .
         </p>
-      </div>
-    </div>,
-    document.body
-  );
-};
-
-export const KeyboardHelpModal: React.FC = () => {
-  const { shortcutsOpen, setShortcutsOpen, shortcuts } = useApp();
-
-  if (!shortcutsOpen) return null;
-
-  const groups: { key: string; title: string }[] = [
-    { key: 'playback', title: 'Playback' },
-    { key: 'seeking', title: 'Seeking' },
-    { key: 'volume', title: 'Volume' },
-    { key: 'subtitles', title: 'Subtitles' },
-    { key: 'navigation', title: 'Navigation' },
-  ];
-
-  return createPortal(
-    <div
-      className="kbdhelp__scrim"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Keyboard shortcuts"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) setShortcutsOpen(false);
-      }}
-    >
-      <div className="kbdhelp__panel" style={{ overflowY: 'auto' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Keyboard size={18} />
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Keyboard shortcuts</h2>
-          </div>
-          <button
-            type="button"
-            className="yt-icon-button"
-            aria-label="Close shortcuts"
-            onClick={() => setShortcutsOpen(false)}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18 }}>
-          {groups.map((grp) => {
-            const list = shortcuts.filter((s) => s.group === grp.key);
-            return (
-              <div key={grp.key}>
-                <h3
-                  style={{
-                    margin: '0 0 8px',
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    letterSpacing: '0.07em',
-                    textTransform: 'uppercase',
-                    color: 'rgba(255,255,255,0.48)',
-                  }}
-                >
-                  {grp.title}
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {list.map((s) => (
-                    <div
-                      key={s.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        fontSize: 13,
-                        color: 'rgba(255,255,255,0.85)',
-                      }}
-                    >
-                      <span>{s.label}</span>
-                      <kbd className="sitebar__kbd">{s.currentKey}</kbd>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>,
     document.body

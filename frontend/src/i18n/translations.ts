@@ -9,6 +9,7 @@ const UI_STRINGS_EN: Record<string, string> = {
   // Primary Navigation
   'nav.home': 'Home',
   'nav.browse': 'Browse',
+  'nav.schedule': 'Schedule',
   'nav.latest': 'Latest',
   'nav.genres': 'Genres',
   'nav.manga': 'Manga',

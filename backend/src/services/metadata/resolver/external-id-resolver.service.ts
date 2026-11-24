@@ -1,6 +1,7 @@
 import { AniListProvider, AniListMedia } from '../providers/anilist.provider.js';
 import { TmdbProvider } from '../providers/tmdb.provider.js';
 import { AnimeMatcherService, AnimeMatchResult, CANONICAL_OVERRIDES } from './anime-matcher.service.js';
+import { AnimeIdentityValidator } from './anime-identity-validator.service.js';
 import { redisCache } from '../../cache/redis-cache.service.js';
 
 export interface ResolvedExternalIds {
@@ -28,7 +29,9 @@ export class ExternalIdResolverService {
       return null;
     }
 
-    const cacheKey = `anime:ext_ids:${anilistId}`;
+    const cacheKey = `anime:ext_ids:v10:${anilistId}`;
+    void redisCache.del(`anime:ext_ids:${anilistId}`);
+    void redisCache.del(`anime:ext_ids:v3:${anilistId}`);
 
     // 1. Check Redis Cache
     try {
@@ -73,7 +76,9 @@ export class ExternalIdResolverService {
   public static async resolveFromMedia(media: AniListMedia): Promise<ResolvedExternalIds> {
     const anilistId = media.id;
     const malId = media.idMal || undefined;
-    const cacheKey = `anime:ext_ids:${anilistId}`;
+    const cacheKey = `anime:ext_ids:v10:${anilistId}`;
+    void redisCache.del(`anime:ext_ids:${anilistId}`);
+    void redisCache.del(`anime:ext_ids:v3:${anilistId}`);
 
     let tmdbId: number | undefined = undefined;
     let imdbId: string | undefined = undefined;
@@ -100,6 +105,29 @@ export class ExternalIdResolverService {
         confidence = match.confidence;
         matchMethod = match.matchMethod;
         source = 'tmdb_api';
+      }
+    }
+
+    // 2.5 Strict Cross-Entity Identity Validation
+    if (tmdbId && mediaType) {
+      try {
+        const details = mediaType === 'movie'
+          ? await TmdbProvider.getMovieDetails(tmdbId)
+          : await TmdbProvider.getTvDetails(tmdbId);
+
+        if (details) {
+          const validation = AnimeIdentityValidator.validateTmdbMatch(media, details);
+          if (!validation.isValid) {
+            console.warn(`[ExternalIdResolver] TMDB ID ${tmdbId} rejected for AniList ${anilistId}: ${validation.reason}`);
+            tmdbId = undefined;
+            mediaType = undefined;
+            confidence = 0;
+            matchMethod = 'rejected_identity';
+            source = 'anilist_only';
+          }
+        }
+      } catch (err) {
+        console.warn(`[ExternalIdResolver] Identity check error for TMDB ${tmdbId}:`, (err as Error).message);
       }
     }
 

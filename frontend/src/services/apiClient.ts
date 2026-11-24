@@ -6,7 +6,10 @@ import type {
   AnimeExternalIds,
   AnimeEpisodeCatalogue,
   RecentAiredEpisodeItem,
+  AiringScheduleItem,
+  WeeklyScheduleResponse,
 } from '@7anime/shared';
+import { cacheManager } from './cache';
 
 export interface BackendHealthResponse {
   status: string;
@@ -68,30 +71,25 @@ export interface UserProfileResponse {
 class ApiClient {
   private baseUrl: string;
   private authToken: string | null = null;
-  private animeCache = new Map<string, { data: ResolvedAnime; timestamp: number }>();
-  private artworkCache = new Map<string, { data: ArtworkResolution; timestamp: number }>();
-  private logoCache = new Map<string, { data: AnimeLogoResult | null; expiresAt: number }>();
-  private inFlightRequests = new Map<string, Promise<any>>();
   private refreshPromise: Promise<boolean> | null = null;
-  private readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
-  private readonly LOGO_NEGATIVE_CACHE_TTL_MS = 60 * 1000; // 60 seconds (short negative TTL)
 
   private readonly SESSION_STORAGE_KEY = '7anime_auth_session';
 
   constructor() {
-    const isDev = Boolean(import.meta.env.DEV);
+    const env = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
+    const isDev = Boolean(env.DEV);
 
     if (isDev) {
       // Local development MUST communicate ONLY with the local backend by default.
       // An explicit development override can be provided via VITE_DEV_API_BASE_URL.
       // Standard production environment variables (VITE_API_BASE_URL / VITE_API_URL) NEVER route dev traffic to Render.
-      const devOverride = (import.meta.env.VITE_DEV_API_BASE_URL as string | undefined)?.trim();
+      const devOverride = (env.VITE_DEV_API_BASE_URL as string | undefined)?.trim();
       const raw = devOverride || 'http://localhost:3001/api';
       const clean = raw.replace(/\/+$/, '');
       this.baseUrl = clean.endsWith('/api') ? clean : `${clean}/api`;
     } else {
       // Production mode: communicate with Render backend via Vercel env variable, or fallback to /api
-      const prodUrl = (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '').trim();
+      const prodUrl = String(env.VITE_API_BASE_URL || env.VITE_API_URL || '').trim();
       if (!prodUrl) {
         this.baseUrl = '/api';
       } else {
@@ -487,260 +485,324 @@ class ApiClient {
   }
 
   /**
-   * Fetches resolved anime details by AniList ID with deduplication and caching.
+   * Fetches resolved anime details by AniList ID with multi-layer caching,
+   * in-flight deduplication, and Stale-While-Revalidate (SWR).
    */
   async getAnimeById(anilistId: number | string): Promise<ResolvedAnime | null> {
-    const key = `anime:${anilistId}`;
-
-    const cached = this.animeCache.get(key);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
-      return cached.data;
-    }
-
-    if (this.inFlightRequests.has(key)) {
-      return this.inFlightRequests.get(key)!;
-    }
-
-    const requestPromise = (async () => {
-      try {
+    const key = `anime:detail:v10:${anilistId}`;
+    void cacheManager.delete(`anime:detail:${anilistId}`);
+    void cacheManager.delete(`anime:detail:v9:${anilistId}`);
+    return cacheManager.getOrFetch<ResolvedAnime | null>(
+      key,
+      async () => {
         const res = await fetch(`${this.baseUrl}/anime/${anilistId}`, {
           headers: this.getHeaders(),
         });
-
         if (!res.ok) {
           if (res.status === 404) return null;
           throw new Error(`API error ${res.status}: ${res.statusText}`);
         }
-
         const json = await res.json();
-        if (json.success && json.data) {
-          this.animeCache.set(key, { data: json.data, timestamp: Date.now() });
-          return json.data as ResolvedAnime;
-        }
-
-        return null;
-      } finally {
-        this.inFlightRequests.delete(key);
+        return json.success && json.data ? (json.data as ResolvedAnime) : null;
+      },
+      {
+        ttlMs: 12 * 60 * 60 * 1000, // 12 hours
+        staleTtlMs: 24 * 60 * 60 * 1000, // 24 hours SWR
+        tags: [`anime:${anilistId}`],
+        negativeTtlMs: 60 * 1000,
       }
-    })();
-
-    this.inFlightRequests.set(key, requestPromise);
-    return requestPromise;
+    );
   }
 
   /**
-   * Fetches specific artwork breakdown for an anime.
+   * Fetches specific artwork breakdown for an anime with multi-layer caching.
    */
   async getAnimeArtwork(anilistId: number | string): Promise<ArtworkResolution | null> {
-    const key = `artwork:${anilistId}`;
-
-    const cached = this.artworkCache.get(key);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL_MS) {
-      return cached.data;
-    }
-
-    if (this.inFlightRequests.has(key)) {
-      return this.inFlightRequests.get(key)!;
-    }
-
-    const requestPromise = (async () => {
-      try {
+    const key = `anime:artwork:v10:${anilistId}`;
+    void cacheManager.delete(`anime:artwork:${anilistId}`);
+    return cacheManager.getOrFetch<ArtworkResolution | null>(
+      key,
+      async () => {
         const res = await fetch(`${this.baseUrl}/anime/${anilistId}/artwork`, {
           headers: this.getHeaders(),
         });
-
         if (!res.ok) {
           if (res.status === 404) return null;
           throw new Error(`Artwork fetch error ${res.status}`);
         }
-
         const json = await res.json();
-        if (json.success && json.data) {
-          this.artworkCache.set(key, { data: json.data, timestamp: Date.now() });
-          return json.data as ArtworkResolution;
-        }
-
-        return null;
-      } finally {
-        this.inFlightRequests.delete(key);
+        return json.success && json.data ? (json.data as ArtworkResolution) : null;
+      },
+      {
+        ttlMs: 7 * 24 * 60 * 60 * 1000, // 7 days
+        staleTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days SWR
+        tags: [`anime:${anilistId}`],
+        negativeTtlMs: 60 * 1000,
       }
-    })();
-
-    this.inFlightRequests.set(key, requestPromise);
-    return requestPromise;
+    );
   }
 
   /**
-   * Searches anime catalog by query string.
+   * Searches anime catalog with 5-minute search caching and in-flight deduplication.
    */
   async searchAnime(query: string, page = 1, limit = 20): Promise<AnimeSearchResult> {
-    const res = await fetch(
-      `${this.baseUrl}/anime/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
-      { headers: this.getHeaders() }
+    const normalized = query.trim().toLowerCase();
+    const key = `anime:search:${normalized}:${page}:${limit}`;
+    return cacheManager.getOrFetch<AnimeSearchResult>(
+      key,
+      async () => {
+        const res = await fetch(
+          `${this.baseUrl}/anime/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
+          { headers: this.getHeaders() }
+        );
+        if (!res.ok) {
+          throw new Error(`Search error ${res.status}`);
+        }
+        const json = await res.json();
+        return json.data;
+      },
+      {
+        ttlMs: 5 * 60 * 1000, // 5 minutes
+        tags: ['search'],
+      }
     );
-
-    if (!res.ok) {
-      throw new Error(`Search error ${res.status}`);
-    }
-
-    const json = await res.json();
-    return json.data;
   }
 
   /**
-   * Fetches genuine transparent TMDB title logo for an anime with client-side caching and in-flight deduplication.
+   * Fetches genuine transparent TMDB title logo with multi-layer caching and negative caching.
    */
   async getLogo(anilistId: number | string): Promise<AnimeLogoResult | null> {
-    const key = String(anilistId);
+    const key = `anime:logo:v10:${anilistId}`;
+    // Purge obsolete legacy cache keys
+    void cacheManager.delete(`anime:logo:${anilistId}`);
+    void cacheManager.delete(`anime:logo:v2:${anilistId}`);
+    void cacheManager.delete(`anime:logo:v3:${anilistId}`);
 
-    // 1. Check in-memory logo cache with explicit expiration
-    const cached = this.logoCache.get(key);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.data;
-    }
-
-    // 2. In-flight request deduplication
-    const inFlightKey = `logo:${key}`;
-    const existing = this.inFlightRequests.get(inFlightKey);
-    if (existing) {
-      return existing;
-    }
-
-    const requestPromise = (async (): Promise<AnimeLogoResult | null> => {
-      try {
+    return cacheManager.getOrFetch<AnimeLogoResult | null>(
+      key,
+      async () => {
         const res = await fetch(`${this.baseUrl}/anime/${anilistId}/logo`, {
           headers: this.getHeaders(),
         });
-
-        if (!res.ok) {
-          // HTTP 404: cache null for 60 seconds
-          if (res.status === 404) {
-            this.logoCache.set(key, {
-              data: null,
-              expiresAt: Date.now() + this.LOGO_NEGATIVE_CACHE_TTL_MS,
-            });
-          }
-          // HTTP 5xx and other transient server errors: return null without caching
-          return null;
-        }
-
+        if (!res.ok) return null;
         const json = await res.json();
-        const logo = json.success && json.data ? (json.data as AnimeLogoResult) : null;
-
-        if (logo) {
-          // Successful response containing a logo: cache for 30 minutes
-          this.logoCache.set(key, {
-            data: logo,
-            expiresAt: Date.now() + this.CACHE_TTL_MS,
-          });
-        } else {
-          // Successful response containing no logo: cache null for 60 seconds
-          this.logoCache.set(key, {
-            data: null,
-            expiresAt: Date.now() + this.LOGO_NEGATIVE_CACHE_TTL_MS,
-          });
-        }
-
-        return logo;
-      } catch {
-        // Network errors: return null without caching
-        return null;
-      } finally {
-        this.inFlightRequests.delete(inFlightKey);
+        return json.success && json.data ? (json.data as AnimeLogoResult) : null;
+      },
+      {
+        ttlMs: 24 * 60 * 60 * 1000, // 24 hours
+        staleTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days SWR
+        tags: [`anime:${anilistId}`],
+        negativeTtlMs: 60 * 1000, // 60s cooldown for missing logos
       }
-    })();
-
-    this.inFlightRequests.set(inFlightKey, requestPromise);
-    return requestPromise;
+    );
   }
 
   /**
-   * Fetches batch genuine transparent TMDB title logos for a list of AniList IDs.
+   * Fetches batch genuine transparent TMDB title logos for a list of AniList IDs,
+   * reusing already-cached logos and requesting only missing items from the backend.
    */
   async getBatchLogos(anilistIds: (number | string)[]): Promise<Record<string, AnimeLogoResult | null>> {
     if (!anilistIds || anilistIds.length === 0) return {};
+
+    const results: Record<string, AnimeLogoResult | null> = {};
+    const missingIds: string[] = [];
+
+    // 1. Check local multi-tier cache for each ID
+    await Promise.all(
+      anilistIds.map(async (id) => {
+        void cacheManager.delete(`anime:logo:${id}`);
+        void cacheManager.delete(`anime:logo:v2:${id}`);
+        void cacheManager.delete(`anime:logo:v3:${id}`);
+        const key = `anime:logo:v10:${id}`;
+        const cached = await cacheManager.get<AnimeLogoResult | null>(key);
+        if (cached !== null && cached !== undefined) {
+          results[String(id)] = cached;
+        } else {
+          missingIds.push(String(id));
+        }
+      })
+    );
+
+    // If all requested logos were warm in cache, return immediately with zero network requests!
+    if (missingIds.length === 0) {
+      return results;
+    }
+
     try {
-      const idsParam = anilistIds.map(String).join(',');
+      const idsParam = missingIds.join(',');
       const res = await fetch(`${this.baseUrl}/anime/logos?ids=${encodeURIComponent(idsParam)}`, {
         headers: this.getHeaders(),
       });
-      if (!res.ok) return {};
+      if (!res.ok) return results;
       const json = await res.json();
-      const results = json.success ? (json.data as Record<string, AnimeLogoResult | null>) : {};
-      const now = Date.now();
-      for (const [id, logo] of Object.entries(results)) {
-        // Successful logo cached for 30m; null result cached for short 60s negative TTL
-        const ttl = logo ? this.CACHE_TTL_MS : this.LOGO_NEGATIVE_CACHE_TTL_MS;
-        this.logoCache.set(id, { data: logo, expiresAt: now + ttl });
+      const fresh = json.success ? (json.data as Record<string, AnimeLogoResult | null>) : {};
+
+      for (const [id, logo] of Object.entries(fresh)) {
+        results[id] = logo;
+        const ttl = logo ? 24 * 60 * 60 * 1000 : 60 * 1000;
+        void cacheManager.set(`anime:logo:v10:${id}`, logo, {
+          ttlMs: ttl,
+          tags: [`anime:${id}`],
+          negativeTtlMs: 60 * 1000,
+        });
       }
       return results;
     } catch {
-      return {};
+      return results;
     }
   }
 
   /**
-   * Fetches verified external IDs (AniList, MAL, TMDB, IMDb, OMDb).
+   * Fetches verified external IDs (AniList, MAL, TMDB, IMDb, OMDb) with 24-hour caching.
    */
   async getExternalIds(anilistId: number | string): Promise<AnimeExternalIds | null> {
-    try {
-      const res = await fetch(`${this.baseUrl}/anime/${anilistId}/external-ids`, {
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json.success ? (json.data as AnimeExternalIds) : null;
-    } catch {
-      return null;
-    }
+    const key = `anime:ext_ids:${anilistId}`;
+    return cacheManager.getOrFetch<AnimeExternalIds | null>(
+      key,
+      async () => {
+        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/external-ids`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.success ? (json.data as AnimeExternalIds) : null;
+      },
+      {
+        ttlMs: 24 * 60 * 60 * 1000, // 24 hours
+        staleTtlMs: 7 * 24 * 60 * 60 * 1000,
+        tags: [`anime:${anilistId}`],
+      }
+    );
   }
 
   /**
-   * Fetches trending anime.
+   * Fetches trending anime with 30-minute caching and SWR background revalidation.
    */
   async getTrending(page = 1, limit = 10): Promise<ResolvedAnime[]> {
-    const res = await fetch(`${this.baseUrl}/anime/trending?page=${page}&limit=${limit}`, {
-      headers: this.getHeaders(),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Trending error ${res.status}`);
-    }
-
-    const json = await res.json();
-    return json.data || [];
+    const key = `anime:trending:${page}:${limit}`;
+    return cacheManager.getOrFetch<ResolvedAnime[]>(
+      key,
+      async () => {
+        const res = await fetch(`${this.baseUrl}/anime/trending?page=${page}&limit=${limit}`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) throw new Error(`Trending error ${res.status}`);
+        const json = await res.json();
+        return json.data || [];
+      },
+      {
+        ttlMs: 30 * 60 * 1000, // 30 minutes
+        staleTtlMs: 60 * 60 * 1000, // 1 hour SWR
+        tags: ['trending'],
+      }
+    );
   }
 
   /**
-   * Fetches verified episode catalogue for an anime by AniList ID.
+   * Fetches verified episode catalogue for an anime by AniList ID with versioned caching.
    */
   async getEpisodes(anilistId: number | string): Promise<AnimeEpisodeCatalogue | null> {
-    try {
-      const res = await fetch(`${this.baseUrl}/anime/${anilistId}/episodes`, {
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json.success ? (json.data as AnimeEpisodeCatalogue) : null;
-    } catch {
-      return null;
-    }
+    const key = `anime:episodes:v10:${anilistId}`;
+    // Purge obsolete legacy cache keys if present in L1/L2
+    void cacheManager.delete(`anime:episodes:${anilistId}`);
+    void cacheManager.delete(`anime:episodes:v8:${anilistId}`);
+    void cacheManager.delete(`anime:episodes:v9:${anilistId}`);
+
+    return cacheManager.getOrFetch<AnimeEpisodeCatalogue | null>(
+      key,
+      async () => {
+        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/episodes`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.success && json.data ? (json.data as AnimeEpisodeCatalogue) : null;
+      },
+      {
+        ttlMs: 5 * 60 * 1000, // 5 minutes fresh TTL
+        staleTtlMs: 15 * 60 * 1000, // 15 minutes SWR
+        tags: [`anime:${anilistId}`],
+        negativeTtlMs: 30 * 1000,
+      }
+    );
   }
 
   /**
-   * Fetches real recently aired episodes directly from the backend.
+   * Fetches real recently aired episodes with 15-minute caching and SWR background revalidation.
    */
   async getRecentAiring(page = 1, limit = 12): Promise<RecentAiredEpisodeItem[]> {
-    try {
-      const res = await fetch(`${this.baseUrl}/anime/recent-airing?page=${page}&limit=${limit}`, {
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) return [];
-      const json = await res.json();
-      return json.success && Array.isArray(json.data) ? json.data : [];
-    } catch {
-      return [];
-    }
+    const key = `anime:recent_airing:${page}:${limit}`;
+    return cacheManager.getOrFetch<RecentAiredEpisodeItem[]>(
+      key,
+      async () => {
+        const res = await fetch(`${this.baseUrl}/anime/recent-airing?page=${page}&limit=${limit}`, {
+          headers: this.getHeaders(),
+        });
+        if (!res.ok) return [];
+        const json = await res.json();
+        return json.success && Array.isArray(json.data) ? json.data : [];
+      },
+      {
+        ttlMs: 15 * 60 * 1000, // 15 minutes
+        staleTtlMs: 30 * 60 * 1000, // 30 minutes SWR
+        tags: ['recent-airing'],
+      }
+    );
+  }
+
+  /**
+   * Fetches weekly airing schedule between start and end UTC timestamps.
+   */
+  async getWeeklySchedule(
+    start: number,
+    end: number,
+    page = 1,
+    limit = 50
+  ): Promise<WeeklyScheduleResponse> {
+    const key = `anime:weekly-schedule:${start}:${end}:${page}:${limit}`;
+    return cacheManager.getOrFetch<WeeklyScheduleResponse>(
+      key,
+      async () => {
+        const res = await fetch(
+          `${this.baseUrl}/anime/schedule?start=${start}&end=${end}&page=${page}&limit=${limit}`,
+          { headers: this.getHeaders() }
+        );
+        if (!res.ok) {
+          throw new Error(`Schedule fetch failed with status: ${res.status}`);
+        }
+        const json = await res.json();
+        if (json.success && json.data) {
+          return json.data as WeeklyScheduleResponse;
+        }
+        throw new Error(json.error || 'Failed to fetch schedule from backend');
+      },
+      {
+        ttlMs: 10 * 60 * 1000, // 10 minutes
+        staleTtlMs: 20 * 60 * 1000, // 20 minutes SWR
+        tags: ['schedule'],
+      }
+    );
+  }
+
+  /**
+   * Invalidate all cached data for a specific anime by AniList ID (detail, artwork, logo, episodes).
+   */
+  async invalidateAnime(anilistId: number | string): Promise<number> {
+    return cacheManager.invalidateByTag(`anime:${anilistId}`);
+  }
+
+  /**
+   * Invalidate search caches.
+   */
+  async invalidateSearch(): Promise<number> {
+    return cacheManager.invalidateByPrefix('anime:search:');
+  }
+
+  /**
+   * Clears all cached application data.
+   */
+  async clearAllCache(): Promise<void> {
+    return cacheManager.clear();
   }
 }
 

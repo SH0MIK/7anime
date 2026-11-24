@@ -87,6 +87,13 @@ export interface PrivacyPreferences {
   playbackDiagnostics: boolean;
 }
 
+export interface DiscordPresencePreferences {
+  enabled: boolean;
+  autoShare: boolean;
+  hideTitle: boolean;
+  hideEpisode: boolean;
+}
+
 export interface CustomThemeColors {
   bg: string;
   surface: string;

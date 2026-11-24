@@ -27,19 +27,26 @@ export class AnimeController {
         return;
       }
 
-      const anilistResponse = await AniListProvider.searchAnime(query, page, limit);
+      const cacheKey = `anime:search:${query.toLowerCase()}:${page}:${limit}`;
+      const result = await redisCache.getOrSet(
+        cacheKey,
+        async () => {
+          const anilistResponse = await AniListProvider.searchAnime(query, page, limit);
 
-      // Resolve each media item
-      const resolvedItems = await Promise.all(
-        anilistResponse.media.map((media) => AnimeResolverService.resolveMedia(media))
+          // Resolve each media item
+          const resolvedItems = await Promise.all(
+            anilistResponse.media.map((media) => AnimeResolverService.resolveMedia(media))
+          );
+
+          return {
+            items: resolvedItems,
+            total: anilistResponse.pageInfo.total,
+            page: anilistResponse.pageInfo.currentPage,
+            hasMore: anilistResponse.pageInfo.hasNextPage,
+          } as AnimeSearchResult;
+        },
+        300 // 5 minutes TTL
       );
-
-      const result: AnimeSearchResult = {
-        items: resolvedItems,
-        total: anilistResponse.pageInfo.total,
-        page: anilistResponse.pageInfo.currentPage,
-        hasMore: anilistResponse.pageInfo.hasNextPage,
-      };
 
       res.json({
         success: true,
@@ -62,9 +69,16 @@ export class AnimeController {
       const page = parseInt(req.query.page as string || '1', 10);
       const limit = Math.min(parseInt(req.query.limit as string || '10', 10), 30);
 
-      const mediaList = await AniListProvider.getTrendingAnime(page, limit);
-      const resolvedItems = await Promise.all(
-        mediaList.map((media) => AnimeResolverService.resolveMedia(media))
+      const cacheKey = `anime:trending:${page}:${limit}`;
+      const resolvedItems = await redisCache.getOrSet(
+        cacheKey,
+        async () => {
+          const mediaList = await AniListProvider.getTrendingAnime(page, limit);
+          return Promise.all(
+            mediaList.map((media) => AnimeResolverService.resolveMedia(media))
+          );
+        },
+        1800 // 30 minutes TTL
       );
 
       res.json({
@@ -89,7 +103,14 @@ export class AnimeController {
       const page = parseInt(req.query.page as string || '1', 10);
       const limit = Math.min(parseInt(req.query.limit as string || '12', 10), 24);
 
-      const recentEpisodes = await AniListProvider.getRecentAiringEpisodes(page, limit);
+      const cacheKey = `anime:recent-airing:${page}:${limit}`;
+      const recentEpisodes = await redisCache.getOrSet(
+        cacheKey,
+        async () => {
+          return AniListProvider.getRecentAiringEpisodes(page, limit);
+        },
+        900 // 15 minutes TTL
+      );
 
       res.json({
         success: true,
@@ -100,6 +121,46 @@ export class AnimeController {
       res.status(500).json({
         success: false,
         error: 'Failed to fetch recent airing episodes.',
+      });
+    }
+  }
+
+  /**
+   * GET /api/anime/schedule?start=&end=&page=&limit=
+   * Returns weekly airing schedule between start and end timestamps.
+   */
+  public static async getWeeklySchedule(req: Request, res: Response): Promise<void> {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const start = req.query.start ? parseInt(req.query.start as string, 10) : now - 3 * 86400;
+      const end = req.query.end ? parseInt(req.query.end as string, 10) : now + 4 * 86400;
+      const page = parseInt((req.query.page as string) || '1', 10);
+      const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 50);
+
+      const cacheKey = `anime:weekly-schedule:${start}:${end}:${page}:${limit}`;
+      const scheduleResult = await redisCache.getOrSet(
+        cacheKey,
+        async () => {
+          return AniListProvider.getWeeklyAiringSchedule(start, end, page, limit);
+        },
+        600 // 10 minutes TTL
+      );
+
+      res.json({
+        success: true,
+        data: {
+          start,
+          end,
+          timezone: 'Asia/Kolkata',
+          items: scheduleResult.items,
+          total: scheduleResult.total,
+        },
+      });
+    } catch (err) {
+      console.error('[AnimeController.getWeeklySchedule] Error:', err);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch weekly airing schedule.',
       });
     }
   }
@@ -137,7 +198,16 @@ export class AnimeController {
       const MAX_BATCH = 30;
       const idsToResolve = numericIds.slice(0, MAX_BATCH);
 
-      const results = await LogoResolverService.resolveBatchLogos(idsToResolve);
+      const batchKey = [...idsToResolve].sort((a, b) => a - b).join(',');
+      const cacheKey = `anime:logos:batch:v10:${batchKey}`;
+
+      const results = await redisCache.getOrSet(
+        cacheKey,
+        async () => {
+          return LogoResolverService.resolveBatchLogos(idsToResolve);
+        },
+        86400 // 24 hours TTL
+      );
 
       res.json({
         success: true,

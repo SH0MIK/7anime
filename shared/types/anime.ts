@@ -17,6 +17,13 @@ export interface AnimeLogoResult {
   height: number;
   language: string | null;
   filePath: string;
+  animeId?: number;
+  provider?: 'tmdb' | 'anilist' | 'mal' | 'custom';
+  providerMediaId?: number | string;
+  artworkType?: 'official_logo' | 'transparent_title' | 'title_art';
+  resolvedAt?: number;
+  verificationStatus?: 'verified' | 'unverified' | 'rejected';
+  verifiedTitle?: string;
 }
 
 export interface AnimeTitles {
@@ -113,7 +120,9 @@ export interface VerifiedEpisode {
   classificationSource?: string;
   hasSub?: boolean;
   hasDub?: boolean;
-  source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | string;
+  source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | 'GENERATED_FALLBACK' | string;
+  metadataVerified?: boolean;
+  isPlayable?: boolean;
 }
 
 export type CatalogueCompleteness =
@@ -124,7 +133,8 @@ export type CatalogueCompleteness =
   | 'mapping_required'
   | 'metadata_unavailable'
   | 'not_applicable'
-  | 'unavailable';
+  | 'unavailable'
+  | 'fallback_generated';
 
 export interface AnimeEpisodeCatalogue {
   anilistId: number;
@@ -136,6 +146,7 @@ export interface AnimeEpisodeCatalogue {
   hasEpisodeList: boolean;
   episodes: VerifiedEpisode[];
   source: string;
+  playableEpisodeCount?: number;
 }
 
 export interface RecentAiredEpisodeItem {
@@ -151,4 +162,33 @@ export interface RecentAiredEpisodeItem {
   duration?: string;
   hasSub: boolean;
   hasDub: boolean;
+}
+
+export interface AiringScheduleItem {
+  id: number; // AniList AiringSchedule ID
+  anilistId: number;
+  malId?: number | null;
+  routeId: string;
+  title: string;
+  romajiTitle?: string;
+  nativeTitle?: string;
+  episode: number;
+  airingAt: number; // UTC unix timestamp in seconds
+  timeUntilAiring: number; // seconds remaining (negative if already aired)
+  status: 'released' | 'upcoming' | 'delayed';
+  poster: string;
+  banner?: string | null;
+  format?: string;
+  genres: string[];
+  score?: number | null;
+  studios: string[];
+  totalEpisodes?: number | null;
+}
+
+export interface WeeklyScheduleResponse {
+  start: number; // UTC start timestamp
+  end: number;   // UTC end timestamp
+  timezone: string; // Default: 'Asia/Kolkata'
+  items: AiringScheduleItem[];
+  total: number;
 }

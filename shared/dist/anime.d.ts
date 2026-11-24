@@ -15,6 +15,13 @@ export interface AnimeLogoResult {
     height: number;
     language: string | null;
     filePath: string;
+    animeId?: number;
+    provider?: 'tmdb' | 'anilist' | 'mal' | 'custom';
+    providerMediaId?: number | string;
+    artworkType?: 'official_logo' | 'transparent_title' | 'title_art';
+    resolvedAt?: number;
+    verificationStatus?: 'verified' | 'unverified' | 'rejected';
+    verifiedTitle?: string;
 }
 export interface AnimeTitles {
     romaji?: string;
@@ -109,9 +116,11 @@ export interface VerifiedEpisode {
     classificationSource?: string;
     hasSub?: boolean;
     hasDub?: boolean;
-    source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | string;
+    source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | 'GENERATED_FALLBACK' | string;
+    metadataVerified?: boolean;
+    isPlayable?: boolean;
 }
-export type CatalogueCompleteness = 'complete' | 'partial' | 'resolving' | 'provider_temporarily_unavailable' | 'mapping_required' | 'metadata_unavailable' | 'not_applicable' | 'unavailable';
+export type CatalogueCompleteness = 'complete' | 'partial' | 'resolving' | 'provider_temporarily_unavailable' | 'mapping_required' | 'metadata_unavailable' | 'not_applicable' | 'unavailable' | 'fallback_generated';
 export interface AnimeEpisodeCatalogue {
     anilistId: number;
     totalAnnouncedEpisodes: number | null;
@@ -122,6 +131,7 @@ export interface AnimeEpisodeCatalogue {
     hasEpisodeList: boolean;
     episodes: VerifiedEpisode[];
     source: string;
+    playableEpisodeCount?: number;
 }
 export interface RecentAiredEpisodeItem {
     id: number;
@@ -136,4 +146,31 @@ export interface RecentAiredEpisodeItem {
     duration?: string;
     hasSub: boolean;
     hasDub: boolean;
+}
+export interface AiringScheduleItem {
+    id: number;
+    anilistId: number;
+    malId?: number | null;
+    routeId: string;
+    title: string;
+    romajiTitle?: string;
+    nativeTitle?: string;
+    episode: number;
+    airingAt: number;
+    timeUntilAiring: number;
+    status: 'released' | 'upcoming' | 'delayed';
+    poster: string;
+    banner?: string | null;
+    format?: string;
+    genres: string[];
+    score?: number | null;
+    studios: string[];
+    totalEpisodes?: number | null;
+}
+export interface WeeklyScheduleResponse {
+    start: number;
+    end: number;
+    timezone: string;
+    items: AiringScheduleItem[];
+    total: number;
 }

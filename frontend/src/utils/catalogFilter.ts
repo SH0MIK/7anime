@@ -185,8 +185,8 @@ export function filterEpisodeList(
       if (ep.kind !== opts.classificationFilter) return false;
     }
     if (opts.hideFiller && ep.kind === 'filler') return false;
-    if (opts.audioFilter === 'sub' && !ep.hasSub) return false;
-    if (opts.audioFilter === 'dub' && !ep.hasDub) return false;
+    if (opts.audioFilter === 'sub' && !ep.hasSub && ep.source !== 'GENERATED_FALLBACK') return false;
+    if (opts.audioFilter === 'dub' && !ep.hasDub && ep.source !== 'GENERATED_FALLBACK') return false;
     if (q) {
       const hay = `episode ${ep.number} ${ep.title} ${ep.arc}`.toLowerCase();
       if (!hay.includes(q)) return false;

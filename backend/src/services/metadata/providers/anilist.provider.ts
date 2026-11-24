@@ -1,7 +1,7 @@
 import { HttpClient } from '../../../utils/httpClient.js';
 import { redisCache, SEVEN_DAYS_SECONDS } from '../../cache/redis-cache.service.js';
 import { anilistBreaker } from '../resolver/circuit-breaker.service.js';
-import { RecentAiredEpisodeItem } from '@7anime/shared';
+import { AiringScheduleItem, RecentAiredEpisodeItem } from '@7anime/shared';
 
 export interface AniListTitle {
   romaji?: string;
@@ -488,6 +488,129 @@ export class AniListProvider {
         return result;
       },
       async () => []
+    );
+  }
+
+  /**
+   * Fetches airing schedule between UTC start and end timestamps.
+   * Returns normalized AiringScheduleItem records with status and IST-ready release metadata.
+   */
+  public static async getWeeklyAiringSchedule(
+    start: number,
+    end: number,
+    page: number = 1,
+    perPage: number = 50
+  ): Promise<{ items: AiringScheduleItem[]; total: number }> {
+    const cacheKey = `anilist:schedule:${start}:${end}:${page}:${perPage}`;
+    const cached = await redisCache.get<{ items: AiringScheduleItem[]; total: number }>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    return anilistBreaker.execute(
+      async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const query = `
+          query GetWeeklyAiringSchedule($start: Int, $end: Int, $page: Int, $perPage: Int) {
+            Page(page: $page, perPage: $perPage) {
+              pageInfo {
+                total
+                hasNextPage
+              }
+              airingSchedules(airingAt_greater: $start, airingAt_lesser: $end, sort: [TIME]) {
+                id
+                airingAt
+                timeUntilAiring
+                episode
+                media {
+                  id
+                  idMal
+                  title {
+                    english
+                    romaji
+                    native
+                  }
+                  coverImage {
+                    large
+                    extraLarge
+                  }
+                  bannerImage
+                  format
+                  status
+                  episodes
+                  duration
+                  genres
+                  averageScore
+                  studios(isMain: true) {
+                    nodes {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        const response = await HttpClient.post<any>(
+          ANILIST_GRAPHQL_URL,
+          {
+            query,
+            variables: { start, end, page, perPage },
+          },
+          { timeoutMs: 9000 }
+        );
+
+        const rawList = response.data?.Page?.airingSchedules || [];
+        const total = response.data?.Page?.pageInfo?.total || rawList.length;
+
+        const items: AiringScheduleItem[] = rawList.map((item: any) => {
+          const media = item.media;
+          const eng = media?.title?.english?.trim();
+          const rom = media?.title?.romaji?.trim();
+          const nat = media?.title?.native?.trim();
+          const title = eng || rom || 'Anime';
+          const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+          const routeId = `${slug}-${media?.id}`;
+
+          let status: 'released' | 'upcoming' | 'delayed' = 'upcoming';
+          if (item.airingAt <= now) {
+            status = 'released';
+          } else if (media?.status === 'CANCELLED' || media?.status === 'HIATUS') {
+            status = 'delayed';
+          }
+
+          const studios = (media?.studios?.nodes || []).map((s: any) => s.name).filter(Boolean);
+
+          return {
+            id: item.id,
+            anilistId: media?.id,
+            malId: media?.idMal || null,
+            routeId,
+            title,
+            romajiTitle: rom || undefined,
+            nativeTitle: nat || undefined,
+            episode: item.episode,
+            airingAt: item.airingAt,
+            timeUntilAiring: item.airingAt - now,
+            status,
+            poster: media?.coverImage?.extraLarge || media?.coverImage?.large || '',
+            banner: media?.bannerImage || null,
+            format: media?.format || 'TV',
+            genres: media?.genres || [],
+            score: media?.averageScore ? Number((media.averageScore / 10).toFixed(1)) : null,
+            studios,
+            totalEpisodes: media?.episodes || null,
+          };
+        });
+
+        const result = { items, total };
+        // 10-minute cache for weekly schedule
+        await redisCache.set(cacheKey, result, 600);
+        return result;
+      },
+      async () => ({ items: [], total: 0 })
     );
   }
 }

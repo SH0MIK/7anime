@@ -25,6 +25,55 @@ const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const FORMATS = ['TV', 'MOVIE', 'OVA', 'ONA', 'SPECIAL'];
 const STATUSES = ['Airing', 'Finished', 'Upcoming'];
 
+const OFFICIAL_ANILIST_GENRES = [
+  'Action',
+  'Adventure',
+  'Comedy',
+  'Drama',
+  'Ecchi',
+  'Fantasy',
+  'Horror',
+  'Mahou Shoujo',
+  'Mecha',
+  'Music',
+  'Mystery',
+  'Psychological',
+  'Romance',
+  'Sci-Fi',
+  'Slice of Life',
+  'Sports',
+  'Supernatural',
+  'Thriller',
+];
+
+const CURATED_ANILIST_TAGS = [
+  'Shounen',
+  'Seinen',
+  'Shoujo',
+  'Josei',
+  'Isekai',
+  'School',
+  'Super Power',
+  'Military',
+  'Historical',
+  'Magic',
+  'Harem',
+  'Martial Arts',
+  'Demons',
+  'Space',
+  'Vampire',
+  'Cyberpunk',
+  'Post-Apocalyptic',
+  'Time Travel',
+  'Parody',
+  'Game',
+  'Police',
+  'Detective',
+  'Idol',
+  'Survival',
+  'Gore',
+];
+
 export const BrowsePage: React.FC = () => {
   const { t, contentPrefs } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,13 +105,20 @@ export const BrowsePage: React.FC = () => {
     const next = new URLSearchParams(searchParams);
     if (!value) next.delete(key);
     else next.set(key, value);
+    if (key !== 'page') {
+      next.delete('page');
+    }
     setSearchParams(next, { replace: true });
   };
 
   const toggleMulti = (key: string, current: string[], item: string) => {
     const exists = current.includes(item);
     const updated = exists ? current.filter((x) => x !== item) : [...current, item];
-    setParam(key, updated.length ? updated.join(',') : null);
+    const next = new URLSearchParams(searchParams);
+    if (!updated.length) next.delete(key);
+    else next.set(key, updated.join(','));
+    next.delete('page');
+    setSearchParams(next, { replace: true });
   };
 
   const page = useMemo(() => {
@@ -115,6 +171,9 @@ export const BrowsePage: React.FC = () => {
     filters.season,
     filters.format,
     filters.status,
+    filters.language,
+    filters.minScore,
+    filters.minEpisodes,
     page,
   ]);
 
@@ -149,9 +208,11 @@ export const BrowsePage: React.FC = () => {
         <div className="page-header__left">
           <h1 className="page-title">{t('browse.title')}</h1>
           <span className="page-subtitle">
-            {t('browse.catalogued', {
-              count: (pageInfo.total || items.length).toLocaleString(),
-            })}
+            {pageInfo.total >= 5000
+              ? '5,000+ anime catalogued'
+              : t('browse.catalogued', {
+                  count: (pageInfo.total || items.length).toLocaleString(),
+                })}
           </span>
         </div>
 
@@ -231,16 +292,16 @@ export const BrowsePage: React.FC = () => {
           </button>
           {openMenu === 'genres' && (
             <div className="facet-popover">
-              {FACETS.genres.slice(0, 30).map((g) => {
-                const active = filters.genres.includes(g.name);
+              {OFFICIAL_ANILIST_GENRES.map((genreName) => {
+                const active = filters.genres.includes(genreName);
                 return (
                   <button
-                    key={g.name}
+                    key={genreName}
                     type="button"
                     className={`row-inline-opt ${active ? 'active' : ''}`}
-                    onClick={() => toggleMulti('genre', filters.genres, g.name)}
+                    onClick={() => toggleMulti('genre', filters.genres, genreName)}
                   >
-                    <span>{g.name}</span>
+                    <span>{genreName}</span>
                     {active && <Check size={14} />}
                   </button>
                 );
@@ -261,16 +322,16 @@ export const BrowsePage: React.FC = () => {
           </button>
           {openMenu === 'tags' && (
             <div className="facet-popover">
-              {FACETS.tags.slice(0, 30).map((tg) => {
-                const active = filters.tags.includes(tg.name);
+              {CURATED_ANILIST_TAGS.map((tagName) => {
+                const active = filters.tags.includes(tagName);
                 return (
                   <button
-                    key={tg.name}
+                    key={tagName}
                     type="button"
                     className={`row-inline-opt ${active ? 'active' : ''}`}
-                    onClick={() => toggleMulti('tag', filters.tags, tg.name)}
+                    onClick={() => toggleMulti('tag', filters.tags, tagName)}
                   >
-                    <span>{tg.name}</span>
+                    <span>{tagName}</span>
                     {active && <Check size={14} />}
                   </button>
                 );
@@ -565,6 +626,179 @@ export const BrowsePage: React.FC = () => {
               <option value="100">100+</option>
             </select>
           </label>
+        </div>
+      )}
+
+      {/* Active Filter Chips */}
+      {hasActiveFilters && (
+        <div
+          className="browse-active-chips"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginBottom: 20,
+            alignItems: 'center',
+          }}
+        >
+          {filters.q && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Search: &ldquo;{filters.q}&rdquo;</span>
+              <button
+                type="button"
+                onClick={() => setParam('q', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove search filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.genres.map((g) => (
+            <span key={g} className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Genre: {g}</span>
+              <button
+                type="button"
+                onClick={() => toggleMulti('genre', filters.genres, g)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label={`Remove genre ${g}`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {filters.tags.map((tg) => (
+            <span key={tg} className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Tag: {tg}</span>
+              <button
+                type="button"
+                onClick={() => toggleMulti('tag', filters.tags, tg)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label={`Remove tag ${tg}`}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {filters.studio && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Studio: {filters.studio}</span>
+              <button
+                type="button"
+                onClick={() => setParam('studio', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove studio filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.year && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Year: {filters.year}</span>
+              <button
+                type="button"
+                onClick={() => setParam('year', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove year filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.season && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Season: {filters.season}</span>
+              <button
+                type="button"
+                onClick={() => setParam('season', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove season filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.format && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Format: {filters.format}</span>
+              <button
+                type="button"
+                onClick={() => setParam('format', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove format filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.status && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Status: {filters.status}</span>
+              <button
+                type="button"
+                onClick={() => setParam('status', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove status filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.language !== 'any' && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Audio: {filters.language === 'sub' ? 'Subtitled' : 'Dubbed'}</span>
+              <button
+                type="button"
+                onClick={() => setParam('lang', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove language filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.minScore && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Min Score: {filters.minScore}+</span>
+              <button
+                type="button"
+                onClick={() => setParam('minScore', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove score filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {filters.minEpisodes && (
+            <span className="watch-pill" style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Min Ep: {filters.minEpisodes}+</span>
+              <button
+                type="button"
+                onClick={() => setParam('minEp', null)}
+                style={{ border: 0, background: 'none', color: 'inherit', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                aria-label="Remove episodes filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          <button
+            type="button"
+            className="watch-pill"
+            style={{
+              fontSize: 12,
+              padding: '4px 10px',
+              background: 'rgba(239, 68, 68, 0.15)',
+              color: '#f87171',
+              borderColor: 'rgba(239, 68, 68, 0.3)',
+            }}
+            onClick={() => setSearchParams(new URLSearchParams(), { replace: true })}
+          >
+            <X size={12} />
+            <span>Clear all</span>
+          </button>
         </div>
       )}
 
