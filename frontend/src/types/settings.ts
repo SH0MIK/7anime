@@ -16,7 +16,7 @@ export type ThemeId =
 export type BaseTextSize = 'small' | 'medium' | 'large';
 export type TitleLangPref = 'english' | 'original';
 export type CatalogLangPref = 'any' | 'sub' | 'dub';
-export type PlayerServer = 'default' | 'beta';
+export type PlayerServer = 'server1' | 'beta' | 'default' | 'hindi';
 
 export interface CaptionSettings {
   fontFamily: 'default' | 'sans' | 'serif' | 'mono';

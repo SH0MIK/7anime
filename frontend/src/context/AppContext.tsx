@@ -81,7 +81,7 @@ export const DEFAULT_CONTENT_PREFS: ContentPreferences = {
 
 export const DEFAULT_PLAYER_PREFS: PlayerPreferences = {
   preferredAudio: 'sub',
-  defaultServer: 'beta',
+  defaultServer: 'server1',
   autoplayNext: true,
   autoSkip: true,
   markWatchedPercent: 90,

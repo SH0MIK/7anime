@@ -197,6 +197,18 @@ export const ANIME_DETAILS_QUERY = `
 `;
 
 /**
+ * Resolves AniList ID from a MyAnimeList ID.
+ */
+export const ANIME_BY_MAL_ID_QUERY = `
+  query GetAnimeIdByMalId($malId: Int) {
+    Media(idMal: $malId, type: ANIME) {
+      id
+      idMal
+    }
+  }
+`;
+
+/**
  * Browse & Search anime query with full filtering and pagination.
  */
 export const BROWSE_ANIME_QUERY = `

@@ -50,6 +50,8 @@ export interface AnimeTitle {
   malId?: number | null;
   anilistId?: string | number | null;
   tmdbId?: string | number | null;
+  mediaType?: 'tv' | 'movie';
+  tmdbSeasonNumber?: number | null;
   omdbId?: string | null;
   season?: string | null;
   tags?: string[];
@@ -80,6 +82,7 @@ export interface EpisodeItem {
   classificationSource?: string;
   arc: string;
   season: number;
+  tmdbEpisodeNumber?: number;
   thumbnail: string | null;
   source?: string;
   metadataVerified?: boolean;

@@ -2,6 +2,7 @@ import { anilistClient } from './client';
 import {
   HOMEPAGE_SECTIONS_QUERY,
   ANIME_DETAILS_QUERY,
+  ANIME_BY_MAL_ID_QUERY,
   BROWSE_ANIME_QUERY,
   SEARCH_PREVIEW_QUERY,
   STUDIO_MEDIA_QUERY,
@@ -99,11 +100,11 @@ export class AniListService {
   /**
    * Fetches full anime details by AniList ID including relations & recommendations.
    */
-  public static async getAnimeDetails(id: number): Promise<AnimeDetailResult | null> {
+  public static async getAnimeDetails(id: number, forceRefresh = false): Promise<AnimeDetailResult | null> {
     const data = await anilistClient.query<{ Media: AniListMedia | null }>(
       ANIME_DETAILS_QUERY,
       { id },
-      { ttlMs: 30 * 60 * 1000 }
+      { ttlMs: 30 * 60 * 1000, forceRefresh }
     );
 
     if (!data.Media) return null;
@@ -126,6 +127,28 @@ export class AniListService {
       related,
       recommendations,
     };
+  }
+
+  /**
+   * Resolves canonical AniList ID from a verified MyAnimeList ID.
+   * Ensures providers requiring AniList IDs never receive a raw MAL ID by mistake.
+   */
+  public static async resolveAniListIdByMalId(malId: number): Promise<number | null> {
+    if (!Number.isInteger(malId) || malId <= 0) return null;
+    try {
+      const data = await anilistClient.query<{ Media: { id: number; idMal?: number | null } | null }>(
+        ANIME_BY_MAL_ID_QUERY,
+        { malId },
+        { ttlMs: 24 * 60 * 60 * 1000 }
+      );
+      const resolvedId = data.Media?.id;
+      return typeof resolvedId === 'number' && Number.isInteger(resolvedId) && resolvedId > 0
+        ? resolvedId
+        : null;
+    } catch (err) {
+      console.warn(`[AniListService] Failed to map MAL ID ${malId} -> AniList ID:`, err);
+      return null;
+    }
   }
 
   /**

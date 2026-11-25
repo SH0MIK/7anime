@@ -25,7 +25,7 @@ export class AniListClient {
   private readonly endpoint = 'https://graphql.anilist.co';
   private readonly defaultTtlMs = 30 * 60 * 1000; // 30 minutes default
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): AniListClient {
     if (!AniListClient.instance) {
@@ -44,19 +44,30 @@ export class AniListClient {
     options: {
       ttlMs?: number;
       skipCache?: boolean;
+      forceRefresh?: boolean;
       timeoutMs?: number;
       maxRetries?: number;
     } = {}
   ): Promise<T> {
     const cacheKey = `anilist:graphql:${query.trim()}::${JSON.stringify(variables)}`;
 
-    if (options.skipCache) {
-      return this.executeWithRetry<T>(
+    if (options.skipCache || options.forceRefresh) {
+      if (options.forceRefresh) {
+        await cacheManager.delete(cacheKey);
+      }
+      const fresh = await this.executeWithRetry<T>(
         query,
         variables,
         options.timeoutMs ?? 15000,
         options.maxRetries ?? 2
       );
+      if (fresh) {
+        void cacheManager.set(cacheKey, fresh, {
+          ttlMs: options.ttlMs ?? this.defaultTtlMs,
+          tags: ['anilist:graphql'],
+        });
+      }
+      return fresh;
     }
 
     return cacheManager.getOrFetch<T>(
@@ -72,6 +83,7 @@ export class AniListClient {
         ttlMs: options.ttlMs ?? this.defaultTtlMs,
         staleTtlMs: 24 * 60 * 60 * 1000, // 24 hours SWR window
         tags: ['anilist:graphql'],
+        forceRefresh: options.forceRefresh,
       }
     );
   }

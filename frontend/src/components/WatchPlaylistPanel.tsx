@@ -112,7 +112,11 @@ export const WatchPlaylistPanel: React.FC<WatchPlaylistPanelProps> = ({
           onChange={(e) => setSelectedSeason(e.target.value)}
           aria-label="Filter by season"
         >
-          <option value="all">Season 1 · {episodes.length.toLocaleString()} eps</option>
+          <option value="all">
+            {seasons.length > 1
+              ? `All seasons · ${episodes.length.toLocaleString()} eps`
+              : `Season ${seasons[0] ?? 1} · ${episodes.length.toLocaleString()} eps`}
+          </option>
           {seasons.map((s) => (
             <option key={s} value={String(s)}>
               Season {s}

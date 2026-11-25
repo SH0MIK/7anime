@@ -5,6 +5,8 @@ export interface AnimeExternalIds {
     anilistId?: number;
     malId?: number;
     tmdbId?: number;
+    mediaType?: 'tv' | 'movie';
+    tmdbSeasonNumber?: number;
     imdbId?: string;
     omdbId?: string;
 }
@@ -119,6 +121,8 @@ export interface VerifiedEpisode {
     source: 'tmdb' | 'kitsu' | 'anilist' | 'official' | 'GENERATED_FALLBACK' | string;
     metadataVerified?: boolean;
     isPlayable?: boolean;
+    tmdbSeasonNumber?: number;
+    tmdbEpisodeNumber?: number;
 }
 export type CatalogueCompleteness = 'complete' | 'partial' | 'resolving' | 'provider_temporarily_unavailable' | 'mapping_required' | 'metadata_unavailable' | 'not_applicable' | 'unavailable' | 'fallback_generated';
 export interface AnimeEpisodeCatalogue {

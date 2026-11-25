@@ -67,8 +67,9 @@ export class EpisodeResolverService {
       return null;
     }
 
-    // Versioned cache key (v10) to invalidate obsolete or cross-contaminated caches
-    const cacheKey = `anime:episodes:v10:${anilistId}`;
+    // Versioned cache key (v11) includes TMDB season/episode mapping for embed servers
+    const cacheKey = `anime:episodes:v11:${anilistId}`;
+    void redisCache.del(`anime:episodes:v10:${anilistId}`);
 
     // 1. Check shared Redis cache
     const cached = await redisCache.get<AnimeEpisodeCatalogue>(cacheKey);
@@ -229,6 +230,8 @@ export class EpisodeResolverService {
                     metadataVerified: true,
                     isPlayable: true,
                     source: 'tmdb',
+                    tmdbSeasonNumber: tmdbEp.original_season_number ?? tmdbEp.season_number,
+                    tmdbEpisodeNumber: tmdbEp.original_episode_number ?? tmdbEp.episode_number,
                   });
                 }
               }

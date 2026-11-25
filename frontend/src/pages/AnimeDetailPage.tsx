@@ -45,15 +45,24 @@ type DetailTab = 'episodes' | 'related' | 'similar' | 'comments' | 'downloads';
 
 /**
  * Extracts a numeric AniList ID from various slug patterns:
- * e.g. "21" -> 21, "one-piece-21" -> 21
+ * e.g. "21" -> 21, "one-piece-21" -> 21, "blue-box-season-2-189123" -> 189123
+ * Strictly rejects season/part numbers like "blue-box-season-2" -> null (triggers search fallback).
  */
 function extractAniListId(rawParam?: string): number | null {
   if (!rawParam) return null;
-  const trimmed = rawParam.trim();
-  if (/^\d+$/.test(trimmed)) {
-    return parseInt(trimmed, 10);
+  let decoded = rawParam;
+  try {
+    decoded = decodeURIComponent(rawParam);
+  } catch {}
+  const clean = decoded.trim().replace(/[?#].*$/, '').replace(/\/+$/, '').trim();
+  if (/^\d+$/.test(clean)) {
+    return parseInt(clean, 10);
   }
-  const match = trimmed.match(/-(\d+)$/);
+  // Exclude season, part, cour, or stage numbers (e.g. -season-2, -part-2)
+  if (/-(season|part|cour|stage)-\d+$/i.test(clean)) {
+    return null;
+  }
+  const match = clean.match(/-(\d+)$/);
   if (match) {
     return parseInt(match[1], 10);
   }
@@ -78,7 +87,7 @@ export const AnimeDetailPage: React.FC = () => {
   const [logoError, setLogoError] = useState(false);
   const requestIdRef = useRef(0);
 
-  async function loadDetailData() {
+  async function loadDetailData(force = false) {
     const currentRequestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
@@ -95,7 +104,14 @@ export const AnimeDetailPage: React.FC = () => {
     let targetId = extractAniListId(id);
     if (!targetId && id) {
       try {
-        const cleanQuery = id.replace(/-/g, ' ');
+        let cleanQuery = decodeURIComponent(id)
+          .replace(/[?#].*$/, '')
+          .replace(/\/+$/, '')
+          .replace(/-(season|part|cour|stage)-\d+$/i, '')
+          .replace(/-\d+$/, '')
+          .replace(/-/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
         const matches = await AniListService.searchPreview(cleanQuery, 1);
         if (matches.length > 0) {
           targetId = matches[0].id;
@@ -113,10 +129,10 @@ export const AnimeDetailPage: React.FC = () => {
 
     try {
       const [backendResolved, anilistDetails, episodesResult, logoResult] = await Promise.allSettled([
-        apiClient.getAnimeById(targetId),
-        AniListService.getAnimeDetails(targetId),
-        apiClient.getEpisodes(targetId),
-        apiClient.getLogo(targetId),
+        apiClient.getAnimeById(targetId, force),
+        AniListService.getAnimeDetails(targetId, force),
+        apiClient.getEpisodes(targetId, force),
+        apiClient.getLogo(targetId, force),
       ]);
 
       if (currentRequestId !== requestIdRef.current) return;
@@ -131,6 +147,13 @@ export const AnimeDetailPage: React.FC = () => {
       }
 
       if (!backendData && !anilistData) {
+        // Automatic single retry with 600ms delay in case of transient network startup delay
+        if (!force) {
+          await new Promise((r) => setTimeout(r, 600));
+          if (currentRequestId === requestIdRef.current) {
+            return loadDetailData(true);
+          }
+        }
         throw new Error(`Failed to load anime with ID ${targetId}`);
       }
 
@@ -232,12 +255,21 @@ export const AnimeDetailPage: React.FC = () => {
     }
 
     // 2. Client-side Guaranteed Fallback:
-    // If backend catalogue returned 0 records or is resolving/stale, but the anime is confirmed finished or has known aired count:
-    const expectedCount = episodesData?.airedEpisodeCount || episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
-    const isCompleted = anime?.status === 'FINISHED' || (!anime?.status && expectedCount > 0);
-    if (expectedCount > 0 && isCompleted) {
-      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()}m` : '24m';
-      return Array.from({ length: expectedCount }, (_, i) => {
+    // If backend catalogue returned 0 records or is resolving/stale, but the anime has confirmed released episodes:
+    let confirmedCount = 0;
+    if (typeof episodesData?.airedEpisodeCount === 'number' && episodesData.airedEpisodeCount > 0) {
+      confirmedCount = episodesData.airedEpisodeCount;
+    } else if (anime?.status === 'FINISHED' || !anime?.status) {
+      confirmedCount = episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
+    } else if (anime?.subCount && anime.subCount > 0) {
+      confirmedCount = anime.subCount;
+    } else if (anime?.status !== 'NOT_YET_RELEASED' && anime?.episodeCount && anime.episodeCount > 0) {
+      confirmedCount = anime.episodeCount;
+    }
+
+    if (confirmedCount > 0) {
+      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/gi, '').trim()}m` : '24m';
+      return Array.from({ length: confirmedCount }, (_, i) => {
         const num = i + 1;
         return {
           number: num,
@@ -389,7 +421,7 @@ export const AnimeDetailPage: React.FC = () => {
         <ErrorState
           title="Anime Not Found"
           message={error || 'Could not find details for this title.'}
-          onRetry={loadDetailData}
+          onRetry={() => loadDetailData(true)}
         />
       </div>
     );
@@ -449,9 +481,11 @@ export const AnimeDetailPage: React.FC = () => {
                       ? allEpisodes.length.toLocaleString()
                       : anime.status === 'FINISHED' && anime.episodeCount > 0
                         ? anime.episodeCount.toLocaleString()
-                        : episodesData?.airedEpisodeCount === 0
-                          ? '0 (Not Yet Aired)'
-                          : '—'}
+                        : anime.subCount > 0
+                          ? anime.subCount.toLocaleString()
+                          : episodesData?.airedEpisodeCount === 0
+                            ? '0 (Not Yet Aired)'
+                            : '—'}
                 </div>
               </div>
               <div>
@@ -492,7 +526,7 @@ export const AnimeDetailPage: React.FC = () => {
               <div>
                 <div className="detail-sidebar-row__label">Duration</div>
                 <div className="detail-sidebar-row__val">
-                  {anime.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()} min per episode` : '24 min per episode'}
+                  {anime.duration ? `${String(anime.duration).replace(/\s*min\b/gi, '').trim()} min per episode` : '24 min per episode'}
                 </div>
               </div>
               <div>

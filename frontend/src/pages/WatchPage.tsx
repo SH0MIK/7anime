@@ -31,14 +31,47 @@ import { AniListService } from '@/src/services/anilist';
 import { apiClient } from '@/src/services/apiClient';
 import { ArtworkResolver } from '@/src/services/artworkResolver';
 import { ErrorState } from '@/src/components/Skeletons';
+import {
+  ORDERED_SERVER_IDS,
+  SERVER_DESCRIPTORS,
+  normalizePlayerServer,
+  resolvePlayerEmbed,
+  type PlayerServerId,
+} from '@/src/services/player';
 import type { AnimeTitle, EpisodeItem, EpisodeKind } from '@/src/types/anime';
 import type { AnimeEpisodeCatalogue } from '@7anime/shared';
 
+function extractSeasonNumberFromTitle(title?: string | null): number {
+  if (!title) return 1;
+  const lower = title.toLowerCase();
+  const match =
+    lower.match(/\b(?:season|series|s)\s*(\d+)\b/i) ||
+    lower.match(/(\d+)(?:st|nd|rd|th)\s*season/i) ||
+    lower.match(/\bpart\s*(\d+)\b/i) ||
+    lower.match(/\bcour\s*(\d+)\b/i);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  }
+  if (/\bseason\s+ii\b|\b2nd\s+season\b/i.test(lower)) return 2;
+  if (/\bseason\s+iii\b|\b3rd\s+season\b/i.test(lower)) return 3;
+  if (/\bseason\s+iv\b|\b4th\s+season\b/i.test(lower)) return 4;
+  return 1;
+}
+
 function extractAniListId(rawParam?: string): number | null {
   if (!rawParam) return null;
-  const trimmed = rawParam.trim();
-  if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
-  const match = trimmed.match(/-(\d+)$/);
+  let decoded = rawParam;
+  try {
+    decoded = decodeURIComponent(rawParam);
+  } catch {}
+  const clean = decoded.trim().replace(/[?#].*$/, '').replace(/\/+$/, '').trim();
+  if (/^\d+$/.test(clean)) return parseInt(clean, 10);
+  // Exclude season, part, cour, or stage numbers (e.g. -season-2, -part-2)
+  if (/-(season|part|cour|stage)-\d+$/i.test(clean)) {
+    return null;
+  }
+  const match = clean.match(/-(\d+)$/);
   return match ? parseInt(match[1], 10) : null;
 }
 
@@ -67,11 +100,22 @@ export const WatchPage: React.FC = () => {
     async function loadWatchAnime() {
       setIsLoading(true);
       setError(null);
+      setAnime(null);
+      setEpisodesData(null);
+      setLiveRelations([]);
 
       let targetId = extractAniListId(id);
       if (!targetId && id) {
         try {
-          const matches = await AniListService.searchPreview(id.replace(/-/g, ' '), 1);
+          let cleanQuery = decodeURIComponent(id)
+            .replace(/[?#].*$/, '')
+            .replace(/\/+$/, '')
+            .replace(/-(season|part|cour|stage)-\d+$/i, '')
+            .replace(/-\d+$/, '')
+            .replace(/-/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const matches = await AniListService.searchPreview(cleanQuery, 1);
           if (matches.length > 0) targetId = matches[0].id;
         } catch (e) {
           console.warn('[WatchPage] AniList search fallback failed:', e);
@@ -85,15 +129,30 @@ export const WatchPage: React.FC = () => {
       }
 
       try {
-        const [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
+        let [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
           apiClient.getAnimeById(targetId),
           AniListService.getAnimeDetails(targetId),
           apiClient.getEpisodes(targetId),
         ]);
 
-        const backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
-        const anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
-        const catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+        let backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
+        let anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
+        let catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+
+        if (!backendData && !anilistData && !isCancelled) {
+          // Automatic single retry with 600ms backoff
+          await new Promise((r) => setTimeout(r, 600));
+          if (!isCancelled) {
+            [backendResolved, anilistDetails, episodesResult] = await Promise.allSettled([
+              apiClient.getAnimeById(targetId, true),
+              AniListService.getAnimeDetails(targetId, true),
+              apiClient.getEpisodes(targetId, true),
+            ]);
+            backendData = backendResolved.status === 'fulfilled' ? backendResolved.value : null;
+            anilistData = anilistDetails.status === 'fulfilled' ? anilistDetails.value : null;
+            catData = episodesResult.status === 'fulfilled' ? episodesResult.value : null;
+          }
+        }
 
         if (catData && !isCancelled) {
           setEpisodesData(catData);
@@ -142,11 +201,25 @@ export const WatchPage: React.FC = () => {
         }
 
         if (backendData) {
+          base.anilistId = base.anilistId ?? backendData.externalIds.anilistId ?? targetId;
+          base.malId = base.malId ?? backendData.externalIds.malId ?? null;
+          base.tmdbId = backendData.externalIds.tmdbId ?? base.tmdbId ?? null;
+          base.mediaType = backendData.externalIds.mediaType ?? base.mediaType ?? (String(base.type || '').toUpperCase() === 'MOVIE' ? 'movie' : 'tv');
+          base.tmdbSeasonNumber = backendData.externalIds.tmdbSeasonNumber ?? base.tmdbSeasonNumber ?? null;
+
           const resolvedArt = ArtworkResolver.resolve(backendData);
           if (resolvedArt.poster) base.poster = resolvedArt.poster;
           if (resolvedArt.backdrop) base.banner = resolvedArt.backdrop;
           if (resolvedArt.logo) base.logo = resolvedArt.logo;
           if (resolvedArt.trailer) base.trailer = resolvedArt.trailer;
+        }
+
+        // Ensure AniList ID is resolved from MAL ID if an entry only provided MAL ID
+        if ((!base.anilistId || Number(base.anilistId) <= 0) && base.malId) {
+          const mappedAniId = await AniListService.resolveAniListIdByMalId(Number(base.malId));
+          if (mappedAniId) {
+            base.anilistId = mappedAniId;
+          }
         }
 
         if (!isCancelled) {
@@ -172,6 +245,11 @@ export const WatchPage: React.FC = () => {
   }, [id]);
 
   const episodes: EpisodeItem[] = useMemo(() => {
+    const inferredSeason =
+      anime?.tmdbSeasonNumber && anime.tmdbSeasonNumber > 0
+        ? anime.tmdbSeasonNumber
+        : extractSeasonNumberFromTitle(anime?.title);
+
     if (episodesData?.episodes && episodesData.episodes.length > 0) {
       return episodesData.episodes.map((ep) => {
         let kind: EpisodeKind = 'unknown';
@@ -192,7 +270,8 @@ export const WatchPage: React.FC = () => {
           kind,
           classificationSource: ep.classificationSource,
           arc: 'Season 1',
-          season: 1,
+          season: ep.tmdbSeasonNumber ?? inferredSeason,
+          tmdbEpisodeNumber: ep.tmdbEpisodeNumber,
           thumbnail: ep.thumbnail || anime?.banner || anime?.cover || null,
           source: ep.source,
           metadataVerified: ep.metadataVerified,
@@ -202,11 +281,20 @@ export const WatchPage: React.FC = () => {
     }
 
     // Client-side Guaranteed Fallback:
-    const expectedCount = episodesData?.airedEpisodeCount || episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
-    const isCompleted = anime?.status === 'FINISHED' || (!anime?.status && expectedCount > 0);
-    if (expectedCount > 0 && isCompleted) {
-      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/i, '').trim()}m` : '24m';
-      return Array.from({ length: expectedCount }, (_, i) => {
+    let confirmedCount = 0;
+    if (typeof episodesData?.airedEpisodeCount === 'number' && episodesData.airedEpisodeCount > 0) {
+      confirmedCount = episodesData.airedEpisodeCount;
+    } else if (anime?.status === 'FINISHED' || !anime?.status) {
+      confirmedCount = episodesData?.totalAnnouncedEpisodes || anime?.episodeCount || 0;
+    } else if (anime?.subCount && anime.subCount > 0) {
+      confirmedCount = anime.subCount;
+    } else if (anime?.status !== 'NOT_YET_RELEASED' && anime?.episodeCount && anime.episodeCount > 0) {
+      confirmedCount = anime.episodeCount;
+    }
+
+    if (confirmedCount > 0) {
+      const cleanDur = anime?.duration ? `${String(anime.duration).replace(/\s*min\b/gi, '').trim()}m` : '24m';
+      return Array.from({ length: confirmedCount }, (_, i) => {
         const num = i + 1;
         return {
           number: num,
@@ -220,7 +308,7 @@ export const WatchPage: React.FC = () => {
           kind: 'unknown' as EpisodeKind,
           classificationSource: 'generated_fallback',
           arc: 'Season 1',
-          season: 1,
+          season: inferredSeason,
           thumbnail: anime?.banner || anime?.cover || null,
           source: 'GENERATED_FALLBACK',
           metadataVerified: false,
@@ -234,30 +322,73 @@ export const WatchPage: React.FC = () => {
 
   const rawEp = epParam ?? searchParams.get('ep') ?? '1';
   const epNum = Math.max(1, Number.parseInt(rawEp, 10) || 1);
-  const currentEpisode: EpisodeItem = useMemo(
-    () => episodes.find((e) => e.number === epNum) ?? episodes[0] ?? {
-      number: 1,
-      title: 'Episode 1',
-      synopsis: 'Episode 1',
-      aired: 'Recent',
-      duration: '24m',
-      durationSec: 1440,
-      hasSub: true,
-      hasDub: false,
-      kind: 'unknown',
-      arc: 'Main Arc',
-      season: 1,
-      thumbnail: null,
-    },
-    [episodes, epNum]
-  );
+  const currentEpisode: EpisodeItem = useMemo(() => {
+    const inferredSeason =
+      anime?.tmdbSeasonNumber && anime.tmdbSeasonNumber > 0
+        ? anime.tmdbSeasonNumber
+        : extractSeasonNumberFromTitle(anime?.title);
+    return (
+      episodes.find((e) => e.number === epNum) ??
+      episodes[0] ?? {
+        number: epNum,
+        title: `Episode ${epNum}`,
+        synopsis: `Episode ${epNum}`,
+        aired: 'Recent',
+        duration: '24m',
+        durationSec: 1440,
+        hasSub: true,
+        hasDub: false,
+        kind: 'unknown',
+        arc: 'Main Arc',
+        season: inferredSeason,
+        thumbnail: null,
+      }
+    );
+  }, [episodes, epNum, anime?.tmdbSeasonNumber, anime?.title]);
 
   const [skipFiller, setSkipFiller] = useState(false);
-  const [audioMode, setAudioMode] = useState<'sub' | 'dub'>('sub');
-  const [server, setServer] = useState<'default' | 'beta'>(playerPrefs.defaultServer);
+  const [audioMode, setAudioMode] = useState<'sub' | 'dub'>(playerPrefs.preferredAudio || 'sub');
+  const [server, setServer] = useState<PlayerServerId>(() =>
+    normalizePlayerServer(playerPrefs.defaultServer)
+  );
   const [backupNoticeDismissed, setBackupNoticeDismissed] = useState(false);
   const [sizePopover, setSizePopover] = useState(false);
   const [synExpanded, setSynExpanded] = useState(false);
+
+  const resolvedEmbed = useMemo(() => {
+    return resolvePlayerEmbed({
+      server,
+      anilistId: anime?.anilistId ?? anime?.id,
+      malId: anime?.malId,
+      tmdbId: anime?.tmdbId,
+      mediaType:
+        anime?.mediaType ??
+        (String(anime?.type || '').toUpperCase() === 'MOVIE' ? 'movie' : 'tv'),
+      seasonNumber: currentEpisode.season,
+      episodeNumber: currentEpisode.number,
+      tmdbEpisodeNumber: currentEpisode.tmdbEpisodeNumber,
+      audioMode,
+      autoplay: playerPrefs.autoplayNext,
+    });
+  }, [
+    server,
+    anime?.anilistId,
+    anime?.id,
+    anime?.malId,
+    anime?.tmdbId,
+    anime?.mediaType,
+    anime?.type,
+    currentEpisode.season,
+    currentEpisode.number,
+    currentEpisode.tmdbEpisodeNumber,
+    audioMode,
+    playerPrefs.autoplayNext,
+  ]);
+
+  const handleSelectServer = (nextServer: PlayerServerId) => {
+    setServer(nextServer);
+    showToast(`Switched to ${SERVER_DESCRIPTORS[nextServer].label}`);
+  };
 
   const watchOrder: WatchOrderItem[] = useMemo(() => {
     if (!anime) return [];
@@ -276,12 +407,6 @@ export const WatchPage: React.FC = () => {
   }, [anime, liveRelations]);
 
   const relatedAnime = liveRelations;
-
-  useEffect(() => {
-    if (audioMode === 'dub' && !currentEpisode.hasDub && currentEpisode.hasSub) {
-      setAudioMode('sub');
-    }
-  }, [audioMode, currentEpisode]);
 
   const goToEpisode = (n: number) => {
     if (anime) navigate(`/anime/${anime.routeId}?ep=${n}`);
@@ -348,6 +473,8 @@ export const WatchPage: React.FC = () => {
             episode={currentEpisode}
             audioMode={audioMode}
             server={server}
+            resolvedEmbed={resolvedEmbed}
+            onSelectServer={handleSelectServer}
             hasPrev={hasPrev}
             hasNext={hasNext}
             onPrevEpisode={() => hasPrev && goToEpisode(prevTargetEp)}
@@ -360,16 +487,44 @@ export const WatchPage: React.FC = () => {
               <button
                 type="button"
                 className="watch-pill"
-                aria-pressed={playerPrefs.autoplayNext}
-                onClick={() => setPlayerPrefs((p) => ({ ...p, autoplayNext: !p.autoplayNext }))}
+                disabled={!resolvedEmbed.capabilities.autoplay}
+                aria-pressed={resolvedEmbed.capabilities.autoplay ? playerPrefs.autoplayNext : false}
+                title={
+                  resolvedEmbed.capabilities.autoNext
+                    ? 'Autoplay & Auto-next enabled'
+                    : resolvedEmbed.capabilities.autoplay
+                      ? 'Autoplay enabled (Auto-next unavailable on this server)'
+                      : 'Autoplay unavailable on this server'
+                }
+                style={{
+                  opacity: resolvedEmbed.capabilities.autoplay ? 1 : 0.38,
+                  cursor: resolvedEmbed.capabilities.autoplay ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() =>
+                  resolvedEmbed.capabilities.autoplay &&
+                  setPlayerPrefs((p) => ({ ...p, autoplayNext: !p.autoplayNext }))
+                }
               >
                 <span>{t('watch.autoplay')}</span>
               </button>
               <button
                 type="button"
                 className="watch-pill"
-                aria-pressed={playerPrefs.autoSkip}
-                onClick={() => setPlayerPrefs((p) => ({ ...p, autoSkip: !p.autoSkip }))}
+                disabled={!resolvedEmbed.capabilities.autoSkip}
+                aria-pressed={resolvedEmbed.capabilities.autoSkip ? playerPrefs.autoSkip : false}
+                title={
+                  resolvedEmbed.capabilities.autoSkip
+                    ? 'Auto-skip intro / outro'
+                    : `Auto-skip is not available on ${SERVER_DESCRIPTORS[server].label}`
+                }
+                style={{
+                  opacity: resolvedEmbed.capabilities.autoSkip ? 1 : 0.38,
+                  cursor: resolvedEmbed.capabilities.autoSkip ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() =>
+                  resolvedEmbed.capabilities.autoSkip &&
+                  setPlayerPrefs((p) => ({ ...p, autoSkip: !p.autoSkip }))
+                }
               >
                 <span>{t('watch.autoskip')}</span>
               </button>
@@ -437,7 +592,7 @@ export const WatchPage: React.FC = () => {
                 className="watch-pill"
                 onClick={() => {
                   const el = document.querySelector('.glassplayer') as HTMLElement | null;
-                  el?.requestFullscreen?.().catch(() => {});
+                  el?.requestFullscreen?.().catch(() => { });
                 }}
               >
                 <Maximize2 size={13} />
@@ -532,54 +687,71 @@ export const WatchPage: React.FC = () => {
             <div className="watch-audio-switch">
               <button
                 type="button"
-                aria-pressed={audioMode === 'sub'}
-                onClick={() => setAudioMode('sub')}
+                aria-pressed={resolvedEmbed.capabilities.supportsSubDub && audioMode === 'sub'}
+                disabled={!resolvedEmbed.capabilities.supportsSubDub}
+                title={
+                  resolvedEmbed.capabilities.supportsSubDub
+                    ? 'Subtitled audio track'
+                    : server === 'hindi'
+                      ? 'Fixed Hindi audio on Hindi server'
+                      : 'Multi-audio controlled inside Server 1 player'
+                }
+                style={{
+                  opacity: resolvedEmbed.capabilities.supportsSubDub ? 1 : 0.4,
+                  cursor: resolvedEmbed.capabilities.supportsSubDub ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() => resolvedEmbed.capabilities.supportsSubDub && setAudioMode('sub')}
               >
                 <Captions size={13} />
                 <span>SUB</span>
               </button>
               <button
                 type="button"
-                aria-pressed={audioMode === 'dub'}
-                disabled={!currentEpisode.hasDub}
-                style={{ opacity: currentEpisode.hasDub ? 1 : 0.4 }}
-                onClick={() => currentEpisode.hasDub && setAudioMode('dub')}
+                aria-pressed={resolvedEmbed.capabilities.supportsSubDub && audioMode === 'dub'}
+                disabled={!resolvedEmbed.capabilities.supportsSubDub}
+                title={
+                  resolvedEmbed.capabilities.supportsSubDub
+                    ? 'English Dub audio track'
+                    : server === 'hindi'
+                      ? 'Fixed Hindi audio on Hindi server'
+                      : 'Multi-audio controlled inside Server 1 player'
+                }
+                style={{
+                  opacity: resolvedEmbed.capabilities.supportsSubDub ? 1 : 0.4,
+                  cursor: resolvedEmbed.capabilities.supportsSubDub ? 'pointer' : 'not-allowed',
+                }}
+                onClick={() => resolvedEmbed.capabilities.supportsSubDub && setAudioMode('dub')}
               >
                 <Mic size={13} />
                 <span>DUB</span>
               </button>
             </div>
 
-            <button
-              type="button"
-              className={`watch-pill ${server === 'default' ? 'is-server-active' : ''}`}
-              onClick={() => {
-                setServer('default');
-                showToast('Switched to Backup server');
-              }}
-            >
-              <span className="ani-switch" data-checked={server === 'default' ? 'true' : 'false'} />
-              <span>Backup server</span>
-            </button>
-
-            <button
-              type="button"
-              className={`watch-pill ${server === 'beta' ? 'is-server-active' : ''}`}
-              onClick={() => {
-                setServer('beta');
-                showToast('Switched to Beta server');
-              }}
-            >
-              <span className="ani-switch" data-checked={server === 'beta' ? 'true' : 'false'} />
-              <span>Beta server</span>
-            </button>
+            {ORDERED_SERVER_IDS.map((srvId) => {
+              const desc = SERVER_DESCRIPTORS[srvId];
+              const active = server === srvId;
+              return (
+                <button
+                  key={srvId}
+                  type="button"
+                  className={`watch-pill ${active ? 'is-server-active' : ''}`}
+                  title={desc.shortDescription}
+                  onClick={() => handleSelectServer(srvId)}
+                >
+                  <span className="ani-switch" data-checked={active ? 'true' : 'false'} />
+                  <span>{desc.label}</span>
+                </button>
+              );
+            })}
 
             <button
               type="button"
               className="watch-pill"
+              title="Cycle streaming server"
               onClick={() => {
-                setServer((s) => (s === 'beta' ? 'default' : 'beta'));
-                showToast(server === 'beta' ? 'Switched to Backup server' : 'Switched to Beta server');
+                const idx = ORDERED_SERVER_IDS.indexOf(server);
+                const next = ORDERED_SERVER_IDS[(idx + 1) % ORDERED_SERVER_IDS.length];
+                handleSelectServer(next);
               }}
             >
               <Server size={13} />

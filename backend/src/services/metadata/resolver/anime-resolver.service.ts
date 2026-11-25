@@ -40,9 +40,10 @@ export class AnimeResolverService {
    * 4. Previously verified cached data
    */
   public static async resolveById(anilistId: number): Promise<ResolvedAnime | null> {
-    const cacheKey = `resolved:anime:v10:${anilistId}`;
-    // Purge obsolete unversioned legacy cache key
+    const cacheKey = `resolved:anime:v11:${anilistId}`;
+    // Purge obsolete legacy cache keys
     void redisCache.del(`resolved:anime:${anilistId}`);
+    void redisCache.del(`resolved:anime:v10:${anilistId}`);
 
     // 1. Check Shared Global 7-Day Redis Cache
     const cached = await redisCache.get<ResolvedAnime>(cacheKey);
@@ -140,6 +141,7 @@ export class AnimeResolverService {
         anilistId: extIds.anilistId,
         malId: extIds.malId,
         tmdbId: extIds.tmdbId,
+        mediaType: extIds.mediaType,
         imdbId: extIds.imdbId,
         omdbId: extIds.omdbId,
       },
@@ -206,6 +208,7 @@ export class AnimeResolverService {
         anilistId,
         malId: mal.id,
         tmdbId: extIds?.tmdbId,
+        mediaType: extIds?.mediaType,
         imdbId: extIds?.imdbId,
         omdbId: extIds?.omdbId,
       },

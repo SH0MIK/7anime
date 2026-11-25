@@ -185,6 +185,33 @@ class ApiClient {
   }
 
   /**
+   * Resilient fetch with automatic fallback between configured baseUrl and relative /api Vite proxy.
+   */
+  public async safeFetch(urlPath: string, options: RequestInit = {}): Promise<Response> {
+    const customHeaders = (options.headers as Record<string, string>) || {};
+    const headers = this.getHeaders(customHeaders);
+    const cleanPath = urlPath.startsWith('/') ? urlPath : `/${urlPath}`;
+    const primaryUrl = `${this.baseUrl}${cleanPath}`;
+
+    try {
+      const res = await fetch(primaryUrl, { ...options, headers });
+      return res;
+    } catch (primaryErr) {
+      // If direct backend request fails (e.g. port/origin network block during local development),
+      // seamlessly fallback to the relative /api dev proxy on the same origin.
+      if (typeof window !== 'undefined' && (primaryUrl.startsWith('http://localhost:') || primaryUrl.startsWith('http://127.0.0.1:'))) {
+        const proxyUrl = `/api${cleanPath}`;
+        try {
+          return await fetch(proxyUrl, { ...options, headers });
+        } catch {
+          throw primaryErr;
+        }
+      }
+      throw primaryErr;
+    }
+  }
+
+  /**
    * Fetches the backend health diagnostics.
    * Checks /api/health with automatic root /health fallback.
    */
@@ -488,16 +515,18 @@ class ApiClient {
    * Fetches resolved anime details by AniList ID with multi-layer caching,
    * in-flight deduplication, and Stale-While-Revalidate (SWR).
    */
-  async getAnimeById(anilistId: number | string): Promise<ResolvedAnime | null> {
-    const key = `anime:detail:v10:${anilistId}`;
+  async getAnimeById(anilistId: number | string, forceRefresh = false): Promise<ResolvedAnime | null> {
+    const key = `anime:detail:v11:${anilistId}`;
+    if (forceRefresh) {
+      await cacheManager.delete(key);
+    }
     void cacheManager.delete(`anime:detail:${anilistId}`);
     void cacheManager.delete(`anime:detail:v9:${anilistId}`);
+    void cacheManager.delete(`anime:detail:v10:${anilistId}`);
     return cacheManager.getOrFetch<ResolvedAnime | null>(
       key,
       async () => {
-        const res = await fetch(`${this.baseUrl}/anime/${anilistId}`, {
-          headers: this.getHeaders(),
-        });
+        const res = await this.safeFetch(`/anime/${anilistId}`);
         if (!res.ok) {
           if (res.status === 404) return null;
           throw new Error(`API error ${res.status}: ${res.statusText}`);
@@ -510,6 +539,7 @@ class ApiClient {
         staleTtlMs: 24 * 60 * 60 * 1000, // 24 hours SWR
         tags: [`anime:${anilistId}`],
         negativeTtlMs: 60 * 1000,
+        forceRefresh,
       }
     );
   }
@@ -517,15 +547,16 @@ class ApiClient {
   /**
    * Fetches specific artwork breakdown for an anime with multi-layer caching.
    */
-  async getAnimeArtwork(anilistId: number | string): Promise<ArtworkResolution | null> {
+  async getAnimeArtwork(anilistId: number | string, forceRefresh = false): Promise<ArtworkResolution | null> {
     const key = `anime:artwork:v10:${anilistId}`;
+    if (forceRefresh) {
+      await cacheManager.delete(key);
+    }
     void cacheManager.delete(`anime:artwork:${anilistId}`);
     return cacheManager.getOrFetch<ArtworkResolution | null>(
       key,
       async () => {
-        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/artwork`, {
-          headers: this.getHeaders(),
-        });
+        const res = await this.safeFetch(`/anime/${anilistId}/artwork`);
         if (!res.ok) {
           if (res.status === 404) return null;
           throw new Error(`Artwork fetch error ${res.status}`);
@@ -538,6 +569,7 @@ class ApiClient {
         staleTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days SWR
         tags: [`anime:${anilistId}`],
         negativeTtlMs: 60 * 1000,
+        forceRefresh,
       }
     );
   }
@@ -551,9 +583,8 @@ class ApiClient {
     return cacheManager.getOrFetch<AnimeSearchResult>(
       key,
       async () => {
-        const res = await fetch(
-          `${this.baseUrl}/anime/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`,
-          { headers: this.getHeaders() }
+        const res = await this.safeFetch(
+          `/anime/search?q=${encodeURIComponent(query)}&page=${page}&limit=${limit}`
         );
         if (!res.ok) {
           throw new Error(`Search error ${res.status}`);
@@ -571,8 +602,11 @@ class ApiClient {
   /**
    * Fetches genuine transparent TMDB title logo with multi-layer caching and negative caching.
    */
-  async getLogo(anilistId: number | string): Promise<AnimeLogoResult | null> {
+  async getLogo(anilistId: number | string, forceRefresh = false): Promise<AnimeLogoResult | null> {
     const key = `anime:logo:v10:${anilistId}`;
+    if (forceRefresh) {
+      await cacheManager.delete(key);
+    }
     // Purge obsolete legacy cache keys
     void cacheManager.delete(`anime:logo:${anilistId}`);
     void cacheManager.delete(`anime:logo:v2:${anilistId}`);
@@ -581,9 +615,7 @@ class ApiClient {
     return cacheManager.getOrFetch<AnimeLogoResult | null>(
       key,
       async () => {
-        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/logo`, {
-          headers: this.getHeaders(),
-        });
+        const res = await this.safeFetch(`/anime/${anilistId}/logo`);
         if (!res.ok) return null;
         const json = await res.json();
         return json.success && json.data ? (json.data as AnimeLogoResult) : null;
@@ -593,6 +625,7 @@ class ApiClient {
         staleTtlMs: 7 * 24 * 60 * 60 * 1000, // 7 days SWR
         tags: [`anime:${anilistId}`],
         negativeTtlMs: 60 * 1000, // 60s cooldown for missing logos
+        forceRefresh,
       }
     );
   }
@@ -701,19 +734,21 @@ class ApiClient {
   /**
    * Fetches verified episode catalogue for an anime by AniList ID with versioned caching.
    */
-  async getEpisodes(anilistId: number | string): Promise<AnimeEpisodeCatalogue | null> {
-    const key = `anime:episodes:v10:${anilistId}`;
+  async getEpisodes(anilistId: number | string, forceRefresh = false): Promise<AnimeEpisodeCatalogue | null> {
+    const key = `anime:episodes:v11:${anilistId}`;
+    if (forceRefresh) {
+      await cacheManager.delete(key);
+    }
     // Purge obsolete legacy cache keys if present in L1/L2
     void cacheManager.delete(`anime:episodes:${anilistId}`);
     void cacheManager.delete(`anime:episodes:v8:${anilistId}`);
     void cacheManager.delete(`anime:episodes:v9:${anilistId}`);
+    void cacheManager.delete(`anime:episodes:v10:${anilistId}`);
 
     return cacheManager.getOrFetch<AnimeEpisodeCatalogue | null>(
       key,
       async () => {
-        const res = await fetch(`${this.baseUrl}/anime/${anilistId}/episodes`, {
-          headers: this.getHeaders(),
-        });
+        const res = await this.safeFetch(`/anime/${anilistId}/episodes`);
         if (!res.ok) return null;
         const json = await res.json();
         return json.success && json.data ? (json.data as AnimeEpisodeCatalogue) : null;
@@ -723,6 +758,7 @@ class ApiClient {
         staleTtlMs: 15 * 60 * 1000, // 15 minutes SWR
         tags: [`anime:${anilistId}`],
         negativeTtlMs: 30 * 1000,
+        forceRefresh,
       }
     );
   }

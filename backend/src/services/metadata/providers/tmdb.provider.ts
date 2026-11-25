@@ -83,6 +83,8 @@ export interface TmdbEpisode {
   id: number;
   episode_number: number;
   season_number: number;
+  original_episode_number?: number;
+  original_season_number?: number;
   name: string;
   overview?: string;
   air_date?: string;
@@ -619,9 +621,11 @@ export class TmdbProvider {
         const yearStr = String(media.startDate.year);
         const matchingYearEps = s1Eps.filter((e) => e.air_date && e.air_date.startsWith(yearStr));
         if (matchingYearEps.length > 0) {
-          // Renumber sequentially 1..N for this season
+          // Renumber sequentially 1..N for this season while preserving original TMDB season & episode
           return matchingYearEps.map((e, idx) => ({
             ...e,
+            original_season_number: e.original_season_number ?? e.season_number,
+            original_episode_number: e.original_episode_number ?? e.episode_number,
             episode_number: idx + 1,
           }));
         }
@@ -661,10 +665,16 @@ export class TmdbProvider {
           if (startsAtOne) {
             allEpisodes.push({
               ...ep,
+              original_season_number: ep.original_season_number ?? ep.season_number,
+              original_episode_number: ep.original_episode_number ?? ep.episode_number,
               episode_number: continuousCounter++,
             });
           } else {
-            allEpisodes.push(ep);
+            allEpisodes.push({
+              ...ep,
+              original_season_number: ep.original_season_number ?? ep.season_number,
+              original_episode_number: ep.original_episode_number ?? ep.episode_number,
+            });
             continuousCounter = Math.max(continuousCounter, (ep.episode_number || 0) + 1);
           }
         }
