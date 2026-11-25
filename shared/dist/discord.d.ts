@@ -7,6 +7,8 @@ export interface DiscordPresencePlaybackPayload {
     currentTimeSec: number;
     durationSec: number;
     startTimestamp?: number;
+    artworkUrl?: string;
+    serverLabel?: string;
     hideTitle?: boolean;
     hideEpisode?: boolean;
 }

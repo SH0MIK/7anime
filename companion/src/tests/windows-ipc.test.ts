@@ -181,3 +181,64 @@ test('Windows/OS IPC: real Discord Desktop named pipes probe status', async () =
 
   assert.ok(paths[0].includes('discord-ipc-0'));
 });
+
+test('Windows/OS IPC: handles Discord RPC ERROR frame gracefully without crashing', async () => {
+  const isWindows = process.platform === 'win32';
+  const testPipePath = isWindows
+    ? `\\\\?\\pipe\\discord-ipc-err-${crypto.randomBytes(4).toString('hex')}`
+    : `/tmp/discord-ipc-err-${crypto.randomBytes(4).toString('hex')}.sock`;
+
+  const server = net.createServer((sock) => {
+    let buf = Buffer.alloc(0);
+    sock.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      while (buf.length >= 8) {
+        const opcode = buf.readUInt32LE(0);
+        const length = buf.readUInt32LE(4);
+        if (buf.length < 8 + length) break;
+        const payloadStr = buf.subarray(8, 8 + length).toString('utf-8');
+        buf = buf.subarray(8 + length);
+        const payload = payloadStr ? JSON.parse(payloadStr) : {};
+
+        const reply = (frame: object) => {
+          const payloadBuf = Buffer.from(JSON.stringify(frame), 'utf-8');
+          const headerBuf = Buffer.alloc(8);
+          headerBuf.writeUInt32LE(DiscordIpcOpcode.FRAME, 0);
+          headerBuf.writeUInt32LE(payloadBuf.length, 4);
+          sock.write(Buffer.concat([headerBuf, payloadBuf]));
+        };
+
+        if (opcode === DiscordIpcOpcode.HANDSHAKE) {
+          reply({
+            cmd: 'DISPATCH',
+            evt: 'READY',
+            data: { user: { id: '123', username: 'ErrTest' } },
+          });
+        } else if (opcode === DiscordIpcOpcode.FRAME && payload.cmd === 'SET_ACTIVITY') {
+          reply({
+            cmd: 'SET_ACTIVITY',
+            evt: 'ERROR',
+            data: { code: 4000, message: 'Invalid payload test error' },
+            nonce: payload.nonce,
+          });
+        }
+      }
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(testPipePath, resolve));
+  const client = new DiscordIpcClient('123456789012345678');
+  const errors: Error[] = [];
+  client.on('error', (err) => errors.push(err));
+
+  await (client as any).tryConnectPipe(testPipePath);
+  await new Promise<void>((resolve) => (client.connected ? resolve() : client.once('ready', () => resolve())));
+
+  const ok = await client.setActivity({ type: 3, details: 'Test' });
+  assert.equal(ok, false);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /Discord RPC error \(4000\)/);
+
+  client.disconnect();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});

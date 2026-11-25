@@ -6,6 +6,9 @@ import type {
 } from '@7anime/shared';
 import { COMPANION_CONFIG } from '../config.js';
 import { PresenceCoordinator } from '../coordinator/presence-coordinator.js';
+import { isValidHttpsArtworkUrl } from '../discord/activity-builder.js';
+
+const MAX_SERVER_LABEL_LEN = 48;
 
 export class CompanionWebSocketServer {
   private httpServer: http.Server | null = null;
@@ -39,11 +42,17 @@ export class CompanionWebSocketServer {
   public start(customPort = COMPANION_CONFIG.WS_PORT): Promise<number> {
     return new Promise((resolve, reject) => {
       this.httpServer = http.createServer((req, res) => {
-        // Return minimal status for localhost HTTP diagnostics
         if (req.method === 'GET' && req.url === '/health') {
+          const reqOrigin = typeof req.headers.origin === 'string'
+            ? req.headers.origin.toLowerCase().trim()
+            : '';
+          const allowedOrigin = COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has(reqOrigin)
+            ? reqOrigin
+            : 'http://localhost:5173';
+
           res.writeHead(200, {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'http://localhost:5173',
+            'Access-Control-Allow-Origin': allowedOrigin,
           });
           res.end(
             JSON.stringify({
@@ -122,8 +131,9 @@ export class CompanionWebSocketServer {
     callback(true);
   }
 
-  private handleClientConnected(ws: WebSocket, req: http.IncomingMessage): void {
+  private handleClientConnected(ws: WebSocket, _req: http.IncomingMessage): void {
     this.clients.add(ws);
+    this.coordinator.ensureIpcConnected();
 
     // Send immediate status on connection
     this.sendToClient(ws, this.buildStatusMessage());
@@ -134,9 +144,8 @@ export class CompanionWebSocketServer {
 
     ws.on('close', () => {
       this.clients.delete(ws);
-      // If all browser tabs disconnect, clear activity after grace period
       if (this.clients.size === 0) {
-        this.coordinator.clearActivity();
+        void this.coordinator.clearActivity();
       }
     });
 
@@ -167,34 +176,77 @@ export class CompanionWebSocketServer {
       switch (msg.type) {
         case 'HANDSHAKE':
         case 'GET_STATUS':
+          this.coordinator.ensureIpcConnected();
           this.sendToClient(ws, this.buildStatusMessage());
           break;
 
         case 'PLAYBACK_UPDATE':
           if (msg.payload && typeof msg.payload === 'object') {
             const p = msg.payload;
-            const isValid =
+            const hasValidCore =
               typeof p.animeTitle === 'string' &&
               p.animeTitle.length <= 256 &&
               typeof p.routeId === 'string' &&
+              p.routeId.length > 0 &&
               p.routeId.length <= 128 &&
               typeof p.episodeNumber === 'number' &&
               Number.isInteger(p.episodeNumber) &&
               p.episodeNumber >= 0 &&
               typeof p.isPlaying === 'boolean' &&
               typeof p.currentTimeSec === 'number' &&
-              typeof p.durationSec === 'number';
+              Number.isFinite(p.currentTimeSec) &&
+              p.currentTimeSec >= 0 &&
+              typeof p.durationSec === 'number' &&
+              Number.isFinite(p.durationSec) &&
+              p.durationSec >= 0;
 
-            if (isValid) {
-              this.coordinator.updatePlayback(p);
+            const hasValidSeason =
+              p.seasonNumber === undefined ||
+              (typeof p.seasonNumber === 'number' &&
+                Number.isInteger(p.seasonNumber) &&
+                p.seasonNumber >= 0);
+
+            const hasValidStartTimestamp =
+              p.startTimestamp === undefined ||
+              (typeof p.startTimestamp === 'number' &&
+                Number.isFinite(p.startTimestamp) &&
+                p.startTimestamp >= 0);
+
+            const hasValidArtwork =
+              p.artworkUrl === undefined || isValidHttpsArtworkUrl(p.artworkUrl);
+
+            const hasValidServerLabel =
+              p.serverLabel === undefined ||
+              (typeof p.serverLabel === 'string' &&
+                p.serverLabel.trim().length > 0 &&
+                p.serverLabel.trim().length <= MAX_SERVER_LABEL_LEN);
+
+            if (
+              hasValidCore &&
+              hasValidSeason &&
+              hasValidStartTimestamp &&
+              hasValidArtwork &&
+              hasValidServerLabel
+            ) {
+              this.coordinator.updatePlayback({
+                ...p,
+                artworkUrl: p.artworkUrl?.trim(),
+                serverLabel: p.serverLabel?.trim(),
+              });
             } else {
               console.warn('[CompanionWS] Dropped malformed PLAYBACK_UPDATE payload');
+              this.sendToClient(ws, {
+                type: 'ERROR',
+                discordConnected: this.coordinator.isDiscordConnected,
+                companionVersion: COMPANION_CONFIG.VERSION,
+                error: 'Invalid PLAYBACK_UPDATE payload',
+              });
             }
           }
           break;
 
         case 'CLEAR_ACTIVITY':
-          this.coordinator.clearActivity();
+          void this.coordinator.clearActivity();
           break;
 
         default:
@@ -217,7 +269,7 @@ export class CompanionWebSocketServer {
         ? {
             animeTitle: current.details,
             episodeNumber: undefined,
-            isPlaying: current.assets?.small_image === 'play',
+            isPlaying: !(current.details?.startsWith('Paused') ?? false),
           }
         : null,
       companionVersion: COMPANION_CONFIG.VERSION,

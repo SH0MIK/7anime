@@ -22,6 +22,38 @@ async function bootstrap() {
   const coordinator = new PresenceCoordinator(ipcClient);
   const wsServer = new CompanionWebSocketServer(coordinator);
 
+  ipcClient.on('ready', (user) => {
+    console.log(`[DiscordIPC] Rich Presence active for Discord user: @${user?.username || 'unknown'} (${user?.id || 'n/a'})`);
+  });
+
+  ipcClient.on('disconnected', () => {
+    console.log('[DiscordIPC] Discord client disconnected. Waiting for client...');
+  });
+
+  ipcClient.on('reconnect_exhausted', () => {
+    console.log(
+      `[DiscordIPC] Initial reconnect attempts reached (${COMPANION_CONFIG.MAX_RECONNECT_ATTEMPTS}). Switching to passive background check every ${Math.round(COMPANION_CONFIG.IDLE_PROBE_INTERVAL_MS / 1000)}s.`
+    );
+  });
+
+  coordinator.on('discord_error', (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[DiscordIPC] Error: ${msg}`);
+  });
+
+  coordinator.on('error', (err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[Coordinator] Error: ${msg}`);
+  });
+
+  coordinator.on('activity_updated', (activity) => {
+    console.log(`[Activity] Synchronized: "${activity.details}" | "${activity.state}"`);
+  });
+
+  coordinator.on('activity_cleared', () => {
+    console.log('[Activity] Cleared presence activity.');
+  });
+
   // 2. Start local WebSocket bridge server (Loopback 127.0.0.1 only)
   try {
     await wsServer.start();
@@ -34,26 +66,10 @@ async function bootstrap() {
   console.log('[DiscordIPC] Searching for local Discord desktop client on OS named pipes...');
   const connected = await ipcClient.connect();
   if (connected) {
-    console.log('[DiscordIPC] Successfully established handshake with Discord Desktop.');
+    console.log('[DiscordIPC] Connected to Discord Desktop pipe; awaiting READY handshake...');
   } else {
     console.log('[DiscordIPC] Discord desktop client not currently running. Will connect automatically when opened.');
   }
-
-  ipcClient.on('ready', (user) => {
-    console.log(`[DiscordIPC] Rich Presence active for Discord user: @${user.username} (${user.id})`);
-  });
-
-  ipcClient.on('disconnected', () => {
-    console.log('[DiscordIPC] Discord client disconnected. Waiting for client...');
-  });
-
-  coordinator.on('activity_updated', (activity) => {
-    console.log(`[Activity] Synchronized: "${activity.details}" | "${activity.state}"`);
-  });
-
-  coordinator.on('activity_cleared', () => {
-    console.log('[Activity] Cleared presence activity.');
-  });
 
   // Graceful termination
   const shutdown = async () => {

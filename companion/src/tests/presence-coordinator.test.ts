@@ -46,8 +46,8 @@ test('PresenceCoordinator: dispatches first update immediately', async () => {
 
   const sent = (mockIpc as unknown as MockDiscordIpcClient).activitiesSent;
   assert.equal(sent.length, 1);
-  assert.equal(sent[0]?.details, 'Naruto');
-  assert.equal(sent[0]?.state, 'Episode 1');
+  assert.equal(sent[0]?.details, 'Watching Naruto · Episode 1');
+  assert.equal(sent[0]?.state, 'On 7Anime');
   coordinator.shutdown();
 });
 

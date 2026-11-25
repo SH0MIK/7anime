@@ -27,7 +27,7 @@ class MockDiscordIpcClient extends EventEmitter {
   }
 }
 
-test('CompanionWebSocketServer: connects, sends STATUS, and updates activity', async () => {
+test('CompanionWebSocketServer: connects, validates payload fields, and updates activity', async () => {
   const mockIpc = new MockDiscordIpcClient() as unknown as DiscordIpcClient;
   const coordinator = new PresenceCoordinator(mockIpc);
   const server = new CompanionWebSocketServer(coordinator);
@@ -45,7 +45,6 @@ test('CompanionWebSocketServer: connects, sends STATUS, and updates activity', a
 
   await new Promise<void>((resolve, reject) => {
     ws.on('open', () => {
-      // Send playback update
       ws.send(
         JSON.stringify({
           type: 'PLAYBACK_UPDATE',
@@ -57,6 +56,8 @@ test('CompanionWebSocketServer: connects, sends STATUS, and updates activity', a
             currentTimeSec: 10,
             durationSec: 1400,
             startTimestamp: 1700000000000,
+            artworkUrl: 'https://s4.anilist.co/demon-slayer.jpg',
+            serverLabel: 'Server 1',
           },
         })
       );
@@ -65,7 +66,7 @@ test('CompanionWebSocketServer: connects, sends STATUS, and updates activity', a
     ws.on('message', (raw) => {
       const parsed = JSON.parse(raw.toString()) as CompanionServerMessage;
       messagesReceived.push(parsed);
-      if (messagesReceived.length >= 1) {
+      if (messagesReceived.length >= 2) {
         resolve();
       }
     });
@@ -73,16 +74,36 @@ test('CompanionWebSocketServer: connects, sends STATUS, and updates activity', a
     ws.on('error', reject);
   });
 
-  // Verify initial status handshake was received
   assert.equal(messagesReceived[0].type, 'STATUS');
   assert.equal(messagesReceived[0].discordConnected, true);
   assert.equal(messagesReceived[0].discordUser?.username, 'AnimeFan');
 
-  // Verify IPC received activity
-  await new Promise((r) => setTimeout(r, 60));
   const sent = (mockIpc as unknown as MockDiscordIpcClient).activities;
   assert.ok(sent.length >= 1);
-  assert.equal(sent[0]?.details, 'Demon Slayer');
+  assert.equal(sent[0]?.details, 'Watching Demon Slayer · Episode 1');
+  assert.equal(sent[0]?.state, 'On 7Anime · Server 1');
+  assert.equal(sent[0]?.assets?.large_image, 'https://s4.anilist.co/demon-slayer.jpg');
+  assert.equal(sent[0]?.buttons?.length, 2);
+
+  // Malformed artworkUrl (HTTP instead of HTTPS) must be rejected with ERROR
+  ws.send(
+    JSON.stringify({
+      type: 'PLAYBACK_UPDATE',
+      payload: {
+        animeTitle: 'Demon Slayer',
+        routeId: 'demon-slayer-101',
+        episodeNumber: 2,
+        isPlaying: true,
+        currentTimeSec: 10,
+        durationSec: 1400,
+        artworkUrl: 'http://insecure.example.com/bad.jpg',
+      },
+    })
+  );
+
+  await new Promise((r) => setTimeout(r, 80));
+  const errMsg = messagesReceived.find((m) => m.type === 'ERROR');
+  assert.ok(errMsg, 'Invalid non-HTTPS artworkUrl must trigger ERROR response');
 
   ws.close();
   await server.close();

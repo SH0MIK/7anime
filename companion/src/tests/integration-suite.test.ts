@@ -77,10 +77,14 @@ test('Comprehensive 17-Point Discord Presence Integration Suite', async () => {
 
   const ipcMock = mockIpc as unknown as MockDiscordIpcClient;
   assert.equal(ipcMock.activities.length, 1);
-  assert.equal(ipcMock.activities[0]?.details, 'Naruto');
-  assert.equal(ipcMock.activities[0]?.state, 'Episode 12');
-  assert.equal(ipcMock.activities[0]?.assets?.small_image, 'play');
+  assert.equal(ipcMock.activities[0]?.details, 'Watching Naruto · Episode 12');
+  assert.equal(ipcMock.activities[0]?.state, 'On 7Anime');
+  assert.equal(ipcMock.activities[0]?.assets?.small_image, undefined);
   assert.equal(ipcMock.activities[0]?.timestamps?.start, 1700000000000);
+  assert.deepEqual(ipcMock.activities[0]?.buttons, [
+    { label: 'Visit 7Anime', url: 'https://7anime-new.vercel.app' },
+    { label: 'Join Discord', url: 'https://discord.gg/TpqgaXjDQC' },
+  ]);
 
   // 3. Duplicate playback event suppression (Rate limit / Zero unnecessary requests)
   ws1.send(JSON.stringify({ type: 'PLAYBACK_UPDATE', payload: ep12Payload }));
@@ -95,7 +99,7 @@ test('Comprehensive 17-Point Discord Presence Integration Suite', async () => {
     episodeNumber: 13,
   };
   const ep13Activity = ActivityBuilder.buildActivity(ep13Payload);
-  assert.equal(ep13Activity.state, 'Episode 13');
+  assert.equal(ep13Activity.details, 'Watching Naruto · Episode 13');
   assert.equal(ActivityBuilder.isSameActivity(ipcMock.activities[0], ep13Activity), false);
 
   // 5. Pause and resume
@@ -104,8 +108,8 @@ test('Comprehensive 17-Point Discord Presence Integration Suite', async () => {
     isPlaying: false,
   };
   const pausedActivity = ActivityBuilder.buildActivity(pausedPayload);
-  assert.equal(pausedActivity.details, 'Paused: Naruto');
-  assert.equal(pausedActivity.assets?.small_image, 'pause');
+  assert.equal(pausedActivity.details, 'Paused: Naruto · Episode 12');
+  assert.equal(pausedActivity.state, 'Paused · On 7Anime');
   assert.equal(pausedActivity.timestamps, undefined);
 
   // 6. User disables presence or clears activity
@@ -160,8 +164,8 @@ test('Comprehensive 17-Point Discord Presence Integration Suite', async () => {
     hideEpisode: true,
   };
   const fallbackActivity = ActivityBuilder.buildActivity(missingMetaPayload);
-  assert.equal(fallbackActivity.details, 'Anime');
-  assert.equal(fallbackActivity.state, 'Streaming on 7Anime');
+  assert.equal(fallbackActivity.details, 'Watching anime on 7Anime');
+  assert.equal(fallbackActivity.state, 'On 7Anime');
   assert.equal(fallbackActivity.assets?.large_image, '7anime_large');
 
   await server.close();

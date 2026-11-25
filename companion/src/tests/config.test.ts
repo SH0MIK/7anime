@@ -80,8 +80,13 @@ test('config: EXACT_ALLOWED_ORIGINS strictly prohibits wildcard origins', () => 
   assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('http://localhost:3000'));
   assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('http://127.0.0.1:5173'));
   assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('http://127.0.0.1:3000'));
+  assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('https://7anime-new.vercel.app'));
   assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('https://7anime.to'));
   assert.ok(COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('https://www.7anime.to'));
+
+  assert.equal(COMPANION_CONFIG.WEBSITE_URL, 'https://7anime-new.vercel.app');
+  assert.equal(COMPANION_CONFIG.DISCORD_INVITE_URL, 'https://discord.gg/TpqgaXjDQC');
+  assert.ok(typeof COMPANION_CONFIG.DISCORD_CLIENT_ID === 'string' && COMPANION_CONFIG.DISCORD_CLIENT_ID.length >= 17);
 
   // Wildcards or untrusted subdomains must NOT be present
   assert.ok(!COMPANION_CONFIG.EXACT_ALLOWED_ORIGINS.has('*.vercel.app'));

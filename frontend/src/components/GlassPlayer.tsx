@@ -84,6 +84,24 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
 
   const lastLoggedRef = useRef<{ sec: number; at: number }>({ sec: -1, at: 0 });
   const hasStartedPresenceRef = useRef(false);
+  const presenceSessionRef = useRef<{
+    key: string;
+    startTimestamp: number;
+    lastPosSec: number;
+    isPaused: boolean;
+  }>({ key: '', startTimestamp: 0, lastPosSec: 0, isPaused: false });
+
+  const presenceArtworkUrl = useMemo(() => {
+    const candidates = [anime.poster, anime.cover, anime.banner];
+    for (const raw of candidates) {
+      if (typeof raw !== 'string') continue;
+      const trimmed = raw.trim();
+      if (trimmed.startsWith('https://') && trimmed.length <= 256) {
+        return trimmed;
+      }
+    }
+    return undefined;
+  }, [anime.poster, anime.cover, anime.banner]);
 
   const activeEmbedKey = useMemo(
     () => `${resolvedEmbed.serverId}::${resolvedEmbed.embedUrl ?? 'none'}::${reloadKey}`,
@@ -195,6 +213,49 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
         logWatchProgress(anime.routeId, episode.number, pos, dur, audioMode);
       }
 
+      const prevSession = presenceSessionRef.current;
+      const sessionKey = `${anime.routeId}::${episode.number}`;
+      const isPausedNow = Boolean(progress.isPaused || progress.completed);
+      const jumpedSignificantly =
+        Math.abs(pos - prevSession.lastPosSec) > 4 ||
+        (prevSession.isPaused && !isPausedNow);
+
+      if (
+        prevSession.key !== sessionKey ||
+        prevSession.isPaused !== isPausedNow ||
+        jumpedSignificantly
+      ) {
+        const nextStart = isPausedNow
+          ? prevSession.startTimestamp
+          : jumpedSignificantly || prevSession.key !== sessionKey || prevSession.startTimestamp <= 0
+            ? Date.now() - Math.floor(pos * 1000)
+            : prevSession.startTimestamp;
+
+        presenceSessionRef.current = {
+          key: sessionKey,
+          startTimestamp: nextStart,
+          lastPosSec: pos,
+          isPaused: isPausedNow,
+        };
+
+        hasStartedPresenceRef.current = true;
+        discordPresenceCoordinator.claimLeadership(anime.routeId);
+        discordPresenceService.updatePlayback({
+          animeTitle: anime.title,
+          routeId: anime.routeId,
+          episodeNumber: episode.number,
+          seasonNumber: episode.season || 1,
+          isPlaying: !isPausedNow,
+          currentTimeSec: Math.floor(pos),
+          durationSec: dur,
+          startTimestamp: !isPausedNow ? nextStart : undefined,
+          artworkUrl: presenceArtworkUrl,
+          serverLabel: SERVER_DESCRIPTORS[resolvedEmbed.serverId].label,
+        });
+      } else {
+        presenceSessionRef.current.lastPosSec = pos;
+      }
+
       if (
         progress.completed &&
         resolvedEmbed.capabilities.autoNext &&
@@ -210,21 +271,50 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [
     anime.routeId,
+    anime.title,
     audioMode,
     episode.durationSec,
     episode.number,
+    episode.season,
     hasNext,
     logWatchProgress,
     onNextEpisode,
     playerPrefs.autoplayNext,
+    presenceArtworkUrl,
     resolvedEmbed.capabilities.autoNext,
     resolvedEmbed.capabilities.progressPostMessage,
     resolvedEmbed.resolvedIdentifiers.anilistId,
+    resolvedEmbed.serverId,
   ]);
 
-  // Synchronize Discord Rich Presence when embed stream finishes loading
+  // Synchronize Discord Rich Presence when embed stream finishes loading or server switches
   useEffect(() => {
-    if (iframeLoaded && resolvedEmbed.ok && !iframeError && !providerError) {
+    const blocking = !resolvedEmbed.ok || iframeError || timedOut || Boolean(providerError);
+    if (blocking) {
+      if (hasStartedPresenceRef.current) {
+        hasStartedPresenceRef.current = false;
+        discordPresenceService.clearActivity();
+        discordPresenceCoordinator.releaseLeadership();
+      }
+      return;
+    }
+
+    if (iframeLoaded) {
+      const sessionKey = `${anime.routeId}::${episode.number}`;
+      const existing = presenceSessionRef.current;
+      const initialPos = Math.max(0, lastLoggedRef.current.sec);
+      const startTs =
+        existing.key === sessionKey && existing.startTimestamp > 0
+          ? existing.startTimestamp
+          : Date.now() - Math.floor(initialPos * 1000);
+
+      presenceSessionRef.current = {
+        key: sessionKey,
+        startTimestamp: startTs,
+        lastPosSec: initialPos,
+        isPaused: false,
+      };
+
       hasStartedPresenceRef.current = true;
       discordPresenceCoordinator.claimLeadership(anime.routeId);
       discordPresenceService.updatePlayback({
@@ -233,21 +323,26 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
         episodeNumber: episode.number,
         seasonNumber: episode.season || 1,
         isPlaying: true,
-        currentTimeSec: Math.max(0, Math.floor(lastLoggedRef.current.sec || 0)),
+        currentTimeSec: Math.floor(initialPos),
         durationSec: episode.durationSec || 1440,
-        startTimestamp: Date.now(),
+        startTimestamp: startTs,
+        artworkUrl: presenceArtworkUrl,
+        serverLabel: SERVER_DESCRIPTORS[resolvedEmbed.serverId].label,
       });
     }
   }, [
     iframeLoaded,
     resolvedEmbed.ok,
+    resolvedEmbed.serverId,
     iframeError,
+    timedOut,
     providerError,
     anime.title,
     anime.routeId,
     episode.number,
     episode.season,
     episode.durationSec,
+    presenceArtworkUrl,
   ]);
 
   // Clean up Discord activity on episode change or unmount

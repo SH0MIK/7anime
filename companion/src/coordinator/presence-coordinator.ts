@@ -21,7 +21,6 @@ export class PresenceCoordinator extends EventEmitter {
   private setupListeners(): void {
     this.ipcClient.on('ready', (user) => {
       this.emit('discord_ready', user);
-      // Re-apply current activity if any was pending when Discord became ready
       if (this.currentRawPayload) {
         this.updatePlayback(this.currentRawPayload);
       }
@@ -49,11 +48,18 @@ export class PresenceCoordinator extends EventEmitter {
     return this.lastSentActivity;
   }
 
+  public ensureIpcConnected(): void {
+    if (!this.ipcClient.connected && typeof (this.ipcClient as any).connect === 'function') {
+      void this.ipcClient.connect();
+    }
+  }
+
   /**
    * Updates playback activity with deduplication, debouncing, and strict rate-limit protection.
    */
   public updatePlayback(payload: DiscordPresencePlaybackPayload): void {
     this.currentRawPayload = payload;
+    this.ensureIpcConnected();
     const targetActivity = ActivityBuilder.buildActivity(payload);
 
     // Rule 1: Duplicate update suppression — If identical to last sent, drop immediately
@@ -68,10 +74,8 @@ export class PresenceCoordinator extends EventEmitter {
     const elapsedSinceLast = now - this.lastSentTime;
 
     if (elapsedSinceLast >= COMPANION_CONFIG.DISCORD_MIN_INTERVAL_MS && !this.cooldownTimer) {
-      // Cooldown expired; dispatch immediately
-      this.dispatchPendingActivity();
+      void this.dispatchPendingActivity();
     } else if (!this.cooldownTimer) {
-      // Within cooldown interval; schedule throttled release
       const delay = Math.max(
         COMPANION_CONFIG.DISCORD_DEBOUNCE_MS,
         COMPANION_CONFIG.DISCORD_MIN_INTERVAL_MS - elapsedSinceLast
@@ -79,8 +83,9 @@ export class PresenceCoordinator extends EventEmitter {
 
       this.cooldownTimer = setTimeout(() => {
         this.cooldownTimer = null;
-        this.dispatchPendingActivity();
+        void this.dispatchPendingActivity();
       }, delay);
+      this.cooldownTimer.unref?.();
     }
   }
 
@@ -94,16 +99,22 @@ export class PresenceCoordinator extends EventEmitter {
       return;
     }
 
-    this.lastSentActivity = activityToSend;
-    this.lastSentTime = Date.now();
+    if (!this.ipcClient.connected) {
+      // Keep pending payload in currentRawPayload until Discord IPC connects and emits ready
+      return;
+    }
 
-    if (this.ipcClient.connected) {
-      try {
-        await this.ipcClient.setActivity(activityToSend);
+    try {
+      const ok = await this.ipcClient.setActivity(activityToSend);
+      if (ok) {
+        this.lastSentActivity = activityToSend;
+        this.lastSentTime = Date.now();
         this.emit('activity_updated', activityToSend);
-      } catch (err) {
-        this.emit('error', err);
+      } else {
+        this.emit('discord_error', new Error('Discord IPC rejected SET_ACTIVITY'));
       }
+    } catch (err) {
+      this.emit('discord_error', err);
     }
   }
 
@@ -120,7 +131,7 @@ export class PresenceCoordinator extends EventEmitter {
     }
 
     if (this.lastSentActivity === null) {
-      return; // Already cleared
+      return;
     }
 
     this.lastSentActivity = null;
@@ -131,7 +142,7 @@ export class PresenceCoordinator extends EventEmitter {
         await this.ipcClient.clearActivity();
         this.emit('activity_cleared');
       } catch (err) {
-        this.emit('error', err);
+        this.emit('discord_error', err);
       }
     }
   }
