@@ -129,6 +129,7 @@ export const EmbedFrame: React.FC<EmbedFrameProps> = ({ resolved, title, reloadK
         objectFit: 'contain',
       }}
       controls
+      crossOrigin="anonymous"
       playsInline
       preload="metadata"
       aria-label={title}
