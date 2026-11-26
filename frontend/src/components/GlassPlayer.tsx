@@ -8,7 +8,6 @@ import {
   ORDERED_SERVER_IDS,
   SERVER_DESCRIPTORS,
   parseEmbedProgressMessage,
-  resolvePlayerEmbed,
   type PlayerServerId,
   type ResolvedEmbedResult,
 } from '@/src/services/player';
@@ -19,7 +18,8 @@ interface GlassPlayerProps {
   episode: EpisodeItem;
   audioMode: 'sub' | 'dub';
   server: PlayerServerId;
-  resolvedEmbed?: ResolvedEmbedResult;
+  resolvedEmbed: ResolvedEmbedResult;
+  onRetryResolve?: () => void;
   onSelectServer?: (next: PlayerServerId) => void;
   onPrevEpisode?: () => void;
   onNextEpisode?: () => void;
@@ -34,43 +34,13 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
   episode,
   audioMode,
   server,
-  resolvedEmbed: resolvedEmbedProp,
+  resolvedEmbed,
+  onRetryResolve,
   onSelectServer,
   onNextEpisode,
   hasNext,
 }) => {
   const { playerPrefs, logWatchProgress } = useApp();
-
-  const resolvedEmbed = useMemo(
-    () =>
-      resolvedEmbedProp ??
-      resolvePlayerEmbed({
-        server,
-        anilistId: anime.anilistId ?? anime.id,
-        malId: anime.malId,
-        tmdbId: anime.tmdbId,
-        mediaType: anime.mediaType,
-        seasonNumber: episode.season,
-        episodeNumber: episode.number,
-        tmdbEpisodeNumber: episode.tmdbEpisodeNumber,
-        audioMode,
-        autoplay: playerPrefs.autoplayNext,
-      }),
-    [
-      resolvedEmbedProp,
-      server,
-      anime.anilistId,
-      anime.id,
-      anime.malId,
-      anime.tmdbId,
-      anime.mediaType,
-      episode.season,
-      episode.number,
-      episode.tmdbEpisodeNumber,
-      audioMode,
-      playerPrefs.autoplayNext,
-    ]
-  );
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -398,9 +368,9 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
   const heroArt = anime.banner ?? episode.thumbnail ?? anime.poster;
   const serverMeta = SERVER_DESCRIPTORS[server];
   const hasBlockingError =
-    !resolvedEmbed.ok || iframeError || timedOut || Boolean(providerError);
+    (!resolvedEmbed.ok && !resolvedEmbed.loading) || iframeError || timedOut || Boolean(providerError);
   const isWaitingForIframe =
-    resolvedEmbed.ok && !iframeLoaded && !iframeError && !timedOut && !providerError;
+    (resolvedEmbed.ok || resolvedEmbed.loading) && !iframeLoaded && !iframeError && !timedOut && !providerError;
 
   const displayErrorText =
     providerError ||
@@ -493,11 +463,11 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
                   {displayErrorText}
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-                  {resolvedEmbed.ok && (
+                  {(resolvedEmbed.ok || resolvedEmbed.errorCode === 'api_error') && (
                     <button
                       type="button"
                       className="watch-pill"
-                      onClick={handleRetry}
+                      onClick={resolvedEmbed.ok ? handleRetry : onRetryResolve}
                       aria-pressed="true"
                     >
                       <RefreshCw size={13} />

@@ -1,4 +1,4 @@
-export type ProviderId = 'animetvplus' | 'nxsha' | 'megaplay';
+export type ProviderId = 'animetvplus' | 'nxsha' | 'megaplay' | 'anivault-api';
 
 export type PlayerServerId = 'server1' | 'beta' | 'default' | 'hindi';
 
@@ -64,8 +64,11 @@ export interface ResolvedEmbedResult {
     | 'missing_tmdb_id'
     | 'unsupported_media_type'
     | 'invalid_season'
-    | 'invalid_episode';
+    | 'invalid_episode'
+    | 'api_error';
   errorMessage?: string;
+  loading?: boolean;
+  resolvedServerName?: string | null;
 }
 
 export interface ParsedEmbedProgress {
