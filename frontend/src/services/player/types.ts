@@ -41,12 +41,24 @@ export interface EmbedResolveInput {
   autoplay?: boolean;
 }
 
+export interface ResolvedSubtitleTrack {
+  lang?: string;
+  label: string;
+  default?: boolean;
+  src?: string;
+  url?: string;
+}
+
 export interface ResolvedEmbedResult {
   ok: boolean;
   provider: ProviderId;
   serverId: PlayerServerId;
   serverLabel: string;
   embedUrl: string | null;
+  hlsProxyUrl?: string | null;
+  m3u8?: string | null;
+  playbackMode?: string | null;
+  subtitles?: ResolvedSubtitleTrack[];
   sandboxMode: SandboxMode;
   sandboxAttribute?: string;
   allowAttribute: string;
