@@ -13,13 +13,16 @@ interface HlsInstance {
   loadSource: (url: string) => void;
   attachMedia: (media: HTMLMediaElement) => void;
   destroy: () => void;
-  on: (event: string, callback: (_event: string, data: { fatal?: boolean }) => void) => void;
+  startLoad: () => void;
+  recoverMediaError: () => void;
+  on: (event: string, callback: (_event: string, data: { fatal?: boolean; type?: string }) => void) => void;
 }
 
 interface HlsConstructor {
   new (config?: Record<string, unknown>): HlsInstance;
   isSupported: () => boolean;
   Events: { ERROR: string; MANIFEST_PARSED: string };
+  ErrorTypes: { NETWORK_ERROR: string; MEDIA_ERROR: string };
 }
 
 declare global {
@@ -94,10 +97,23 @@ export const EmbedFrame: React.FC<EmbedFrameProps> = ({ resolved, title, reloadK
           fragLoadingTimeOut: 30000,
         });
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal && !disposed) {
-            console.error('[AniVault HLS] Fatal playback error:', data);
-            onError?.();
+          if (!data.fatal || disposed || !hls) return;
+          console.error('[AniVault HLS] Fatal playback error:', data);
+          // Match the API tester's recovery behavior: transient playlist/segment
+          // network failures and decode errors should recover before failing the player.
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+            return;
           }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+            return;
+          }
+          onError?.();
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          // Let browser autoplay policy decide; controls remain available if blocked.
+          video.play().catch(() => {});
         });
         hls.attachMedia(video);
         hls.loadSource(source);
