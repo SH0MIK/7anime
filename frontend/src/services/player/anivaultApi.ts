@@ -100,10 +100,10 @@ export async function resolveAniVaultStream(input: {
       response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
     } else {
       if (!anilistId) return failure('ZokoAnime requires a valid AniList ID.');
-      const serverId = 'anilist::' + String(anilistId) + '::' + String(episodeNumber) + '::' + audioMode;
-      const url = new URL(API_BASE + '/api/providers/zokoanime/watch');
-      url.searchParams.set('serverId', serverId);
-      response = await fetch(url.toString(), { headers: { Accept: 'application/json' }, signal });
+      const directId = anilistId ? String(anilistId) : malId ? 'mal-' + String(malId) : '';
+      if (!directId) return failure('ZokoAnime requires an AniList ID or MAL ID.');
+      const url = API_BASE + '/api/watch/zokoanime/' + encodeURIComponent(directId) + '/' + episodeNumber + '/' + audioMode;
+      response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
     }
 
     const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
