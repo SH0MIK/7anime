@@ -99,8 +99,8 @@ export async function resolveAniVaultStream(input: {
       const url = API_BASE + '/api/watch/megaplay/' + anilistId + '/' + episodeNumber + '/' + audioMode;
       response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
     } else {
-      if (!malId) return failure('ZokoAnime requires a valid MAL ID.');
-      const serverId = String(malId) + '::' + String(episodeNumber) + '::' + audioMode;
+      if (!anilistId) return failure('ZokoAnime requires a valid AniList ID.');
+      const serverId = 'anilist::' + String(anilistId) + '::' + String(episodeNumber) + '::' + audioMode;
       const url = new URL(API_BASE + '/api/providers/zokoanime/watch');
       url.searchParams.set('serverId', serverId);
       response = await fetch(url.toString(), { headers: { Accept: 'application/json' }, signal });
