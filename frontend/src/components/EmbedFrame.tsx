@@ -76,7 +76,11 @@ export const EmbedFrame: React.FC<EmbedFrameProps> = ({ resolved, title, reloadK
     const start = async () => {
       // Prefer hls.js on browsers with MediaSource. Some Android browsers report
       // native HLS support but fail to load provider playlists through it.
-      await loadHlsLibrary();
+      try {
+        await loadHlsLibrary();
+      } catch (error) {
+        console.warn('[AniVault HLS] hls.js could not be loaded; trying native HLS:', error);
+      }
       if (disposed) return;
       const Hls = window.Hls;
 
