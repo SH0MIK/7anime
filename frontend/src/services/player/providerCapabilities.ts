@@ -52,24 +52,20 @@ const descriptor = (
 });
 
 export const SERVER_DESCRIPTORS: Record<PlayerServerId, ServerDescriptor> = {
-  server1: descriptor('server1', 'Anikoto', 'AniVault API · Anikoto'),
-  beta: descriptor('beta', 'DesiDub', 'AniVault API · DesiDub'),
+  server1: descriptor('server1', 'ZokoAnime', 'AniVault API · ZokoAnime'),
+  beta: descriptor('beta', 'DesiDub (disabled)', 'Unavailable'),
   default: descriptor('default', 'MegaPlay', 'AniVault API · MegaPlay Direct'),
-  hindi: descriptor('hindi', 'AnimeHeaven', 'AniVault API · AnimeHeaven'),
+  hindi: descriptor('hindi', 'AnimeHeaven (disabled)', 'Unavailable'),
 };
 
 export const ORDERED_SERVER_IDS: readonly PlayerServerId[] = [
-  'server1',
-  'beta',
   'default',
-  'hindi',
+  'server1',
 ];
 
 export function normalizePlayerServer(raw?: string | null): PlayerServerId {
-  if (raw === 'server1' || raw === 'beta' || raw === 'default' || raw === 'hindi') {
-    return raw;
-  }
-  return 'server1';
+  if (raw === 'server1' || raw === 'default') return raw;
+  return 'default';
 }
 
 export function getSandboxAttribute(_mode: SandboxMode): string | undefined {
