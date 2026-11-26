@@ -42,7 +42,6 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
 }) => {
   const { playerPrefs, logWatchProgress } = useApp();
 
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const [iframeLoaded, setIframeLoaded] = useState(false);
@@ -122,14 +121,6 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
   // Listen to cross-origin postMessage events from the currently active iframe only
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (
-        iframeRef.current?.contentWindow &&
-        event.source &&
-        event.source !== iframeRef.current.contentWindow
-      ) {
-        return;
-      }
-
       const raw = event.data;
       if (raw && typeof raw === 'object') {
         const record = raw as Record<string, unknown>;
@@ -414,7 +405,6 @@ export const GlassPlayer: React.FC<GlassPlayerProps> = ({
         >
           {resolvedEmbed.ok && !providerError ? (
             <EmbedFrame
-              ref={iframeRef}
               resolved={resolvedEmbed}
               title={`${anime.title} — Episode ${episode.number} (${serverMeta.label})`}
               reloadKey={reloadKey}
