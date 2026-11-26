@@ -685,7 +685,7 @@ export const WatchPage: React.FC = () => {
             <div className="watch-server-notice">
               <Info size={16} style={{ flexShrink: 0, opacity: 0.78 }} />
               <span style={{ flex: 1 }}>
-                Subtitle or audio issues, lag or buffering? Switch servers: the Beta server is recommended, and the Backup server lets you switch location.
+                Subtitle or audio issues, lag or buffering? Try another streaming source below.
               </span>
               <button
                 type="button"

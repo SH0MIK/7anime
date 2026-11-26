@@ -72,8 +72,7 @@ export async function resolveAniVaultStream(input: {
   signal?: AbortSignal;
 }): Promise<ResolvedEmbedResult> {
   const { server, episodeNumber, audioMode, signal } = input;
-  const descriptor = SERVER_DESCRIPTORS[server];
-  const base = baseResult(server, input, episodeNumber > 0 && (input.autoplay ?? true));
+  const base = baseResult(server, input, input.autoplay ?? true);
   const anilistId = positiveId(input.anilistId);
   const malId = positiveId(input.malId);
   const id = anilistId ? String(anilistId) : malId ? `mal-${malId}` : null;
@@ -109,15 +108,9 @@ export async function resolveAniVaultStream(input: {
       return failure(detail);
     }
 
-    const candidates = [
-      payload.embedUrl,
-      payload.hlsProxyUrl,
-      payload.mp4ProxyUrl,
-      payload.streamUrl,
-    ];
-    const rawUrl = candidates.find((value): value is string =>
-      typeof value === 'string' && value.trim().length > 0
-    );
+    const rawUrl = typeof payload.embedUrl === 'string' && payload.embedUrl.trim()
+      ? payload.embedUrl
+      : null;
     if (!rawUrl) return failure('The API resolved this source but did not return a playable URL.');
 
     let safeUrl: string;
