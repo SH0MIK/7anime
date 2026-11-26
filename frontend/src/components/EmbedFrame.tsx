@@ -37,10 +37,10 @@ function loadHlsLibrary(): Promise<void> {
   if (window.Hls) return Promise.resolve();
   if (hlsScriptPromise) return hlsScriptPromise;
 
-  hlsScriptPromise = new Promise((resolve, reject) => {
+  const promise = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-hlsjs-loader]');
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('load', () => resolve(undefined), { once: true });
       existing.addEventListener('error', () => reject(new Error('Unable to load HLS playback engine.')), { once: true });
       return;
     }
@@ -49,15 +49,16 @@ function loadHlsLibrary(): Promise<void> {
     script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js';
     script.async = true;
     script.dataset.hlsjsLoader = 'true';
-    script.onload = () => resolve();
+    script.onload = () => resolve(undefined);
     script.onerror = () => reject(new Error('Unable to load HLS playback engine.'));
     document.head.appendChild(script);
-  }).catch((error) => {
+  }).catch((error: unknown) => {
     hlsScriptPromise = null;
     throw error;
   });
 
-  return hlsScriptPromise;
+  hlsScriptPromise = promise;
+  return promise;
 }
 
 export const EmbedFrame: React.FC<EmbedFrameProps> = ({ resolved, title, reloadKey, onLoad, onError }) => {
