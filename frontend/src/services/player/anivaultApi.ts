@@ -10,7 +10,7 @@ import type {
 const API_BASE = (
   import.meta.env.VITE_ANIVAULT_API_URL ||
   'https://anivaultapi-production.up.railway.app'
-).replace(/\\/+$/, '');
+ ).replace(/\/+$/, '');
 
 const SOURCE_BY_SERVER: Record<PlayerServerId, string> = {
   server1: 'anikoto',
