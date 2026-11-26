@@ -54,6 +54,9 @@ export function createLoadingEmbed(
     ...baseResult(server, { ...ids, episodeNumber: ids.episodeNumber ?? 1 }, autoplay),
     ok: false,
     embedUrl: null,
+    hlsProxyUrl: null,
+    m3u8: null,
+    subtitles: [],
     loading: true,
     errorMessage: 'Connecting to AniVault streaming API…',
   };
@@ -73,65 +76,74 @@ export async function resolveAniVaultStream(input: {
   const base = baseResult(server, input, input.autoplay ?? true);
   const anilistId = positiveId(input.anilistId);
   const malId = positiveId(input.malId);
-  const id = anilistId ? String(anilistId) : malId ? `mal-${malId}` : null;
 
   const failure = (message: string): ResolvedEmbedResult => ({
     ...base,
     ok: false,
     embedUrl: null,
+    hlsProxyUrl: null,
+    m3u8: null,
+    subtitles: [],
     errorCode: 'api_error',
     errorMessage: message,
   });
 
-  if (!id) return failure('This title has no usable AniList or MAL ID for AniVault API.');
-  if (!Number.isSafeInteger(episodeNumber) || episodeNumber < 1) {
-    return failure('A valid episode number is required.');
-  }
-
+  if (!Number.isSafeInteger(episodeNumber) || episodeNumber < 1) return failure('A valid episode number is required.');
   const source = SOURCE_BY_SERVER[server];
   if (!source) return failure('This streaming source is no longer available.');
 
   try {
-    let payload: Record<string, unknown>;
+    let response: Response;
     if (source === 'megaplay') {
-      const directId = anilistId ? String(anilistId) : 'mal-' + String(malId);
-      const url = API_BASE + '/api/watch/megaplay/' + encodeURIComponent(directId) + '/' + episodeNumber + '/' + audioMode;
-      const response = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal });
-      payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-      if (!response.ok) return failure(typeof payload.error === 'string' ? payload.error : 'MegaPlay API request failed (HTTP ' + response.status + ').');
+      if (!anilistId) return failure('MegaPlay requires a valid AniList ID.');
+      const url = API_BASE + '/api/watch/megaplay/' + anilistId + '/' + episodeNumber + '/' + audioMode;
+      response = await fetch(url, { headers: { Accept: 'application/json' }, signal });
     } else {
-      if (!anilistId) return failure('ZokoAnime requires a valid AniList ID.');
-      const serversUrl = new URL(API_BASE + '/api/providers/zokoanime/servers');
-      serversUrl.searchParams.set('anilistId', String(anilistId));
-      serversUrl.searchParams.set('ep', String(episodeNumber));
-      const serversResponse = await fetch(serversUrl.toString(), { headers: { Accept: 'application/json' }, signal });
-      const serversPayload = await serversResponse.json().catch(() => ({})) as Record<string, unknown>;
-      if (!serversResponse.ok) return failure(typeof serversPayload.error === 'string' ? serversPayload.error : 'ZokoAnime server lookup failed (HTTP ' + serversResponse.status + ').');
-      const servers = Array.isArray(serversPayload.servers) ? serversPayload.servers as Array<Record<string, unknown>> : [];
-      const selected = servers.find((item) => item.type === audioMode && typeof item.sourceId === 'string');
-      if (!selected || typeof selected.sourceId !== 'string') return failure('No ' + audioMode.toUpperCase() + ' server is available on ZokoAnime for episode ' + episodeNumber + '.');
-      const watchUrl = new URL(API_BASE + '/api/providers/zokoanime/watch');
-      watchUrl.searchParams.set('serverId', selected.sourceId);
-      const watchResponse = await fetch(watchUrl.toString(), { headers: { Accept: 'application/json' }, signal });
-      payload = await watchResponse.json().catch(() => ({})) as Record<string, unknown>;
-      if (!watchResponse.ok) return failure(typeof payload.error === 'string' ? payload.error : 'ZokoAnime playback resolution failed (HTTP ' + watchResponse.status + ').');
+      if (!malId) return failure('ZokoAnime requires a valid MAL ID.');
+      const serverId = String(malId) + '::' + String(episodeNumber) + '::' + audioMode;
+      const url = new URL(API_BASE + '/api/providers/zokoanime/watch');
+      url.searchParams.set('serverId', serverId);
+      response = await fetch(url.toString(), { headers: { Accept: 'application/json' }, signal });
     }
 
-    const rawUrl = typeof payload.embedUrl === 'string' && payload.embedUrl.trim() ? payload.embedUrl : null;
-    if (!rawUrl) return failure('The API resolved this source but did not return a playable URL.');
-    let safeUrl: string;
+    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.ok) return failure(typeof payload.error === 'string' ? payload.error : source + ' playback request failed (HTTP ' + response.status + ').');
+
+    const rawProxy = typeof payload.hlsProxyUrl === 'string' ? payload.hlsProxyUrl.trim() : '';
+    if (!rawProxy) return failure('The API response did not include hlsProxyUrl. Refusing to open the provider embed page.');
+    let safeProxy: string;
     try {
-      const parsed = new URL(rawUrl);
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return failure('The API returned an unsupported playback URL.');
-      safeUrl = parsed.toString();
+      const parsed = new URL(rawProxy);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return failure('The API returned an unsupported HLS proxy URL.');
+      safeProxy = parsed.toString();
     } catch {
-      return failure('The API returned an invalid playback URL.');
+      return failure('The API returned an invalid HLS proxy URL.');
     }
+
+    const subtitles = Array.isArray(payload.subtitles) ? payload.subtitles.flatMap((item): Array<{lang?: string; label: string; default?: boolean; src?: string; url?: string}> => {
+      if (!item || typeof item !== 'object') return [];
+      const track = item as Record<string, unknown>;
+      const trackUrl = typeof track.url === 'string' ? track.url : typeof track.src === 'string' ? track.src : undefined;
+      if (!trackUrl) return [];
+      return [{
+        lang: typeof track.lang === 'string' ? track.lang : undefined,
+        label: typeof track.label === 'string' ? track.label : typeof track.lang === 'string' ? track.lang : 'Subtitle',
+        default: track.default === true,
+        src: typeof track.src === 'string' ? track.src : undefined,
+        url: trackUrl,
+      }];
+    }) : [];
+
+    const m3u8 = typeof payload.m3u8 === 'string' ? payload.m3u8 : null;
     return {
       ...base,
       ok: true,
-      embedUrl: safeUrl,
-      resolvedServerName: typeof payload.server === 'string' ? payload.server : typeof payload.serverName === 'string' ? payload.serverName : source === 'zokoanime' ? 'ZokoAnime' : 'MegaPlay Direct',
+      embedUrl: safeProxy,
+      hlsProxyUrl: safeProxy,
+      m3u8,
+      playbackMode: typeof payload.playbackMode === 'string' ? payload.playbackMode : 'hls',
+      subtitles,
+      resolvedServerName: typeof payload.serverName === 'string' ? payload.serverName : typeof payload.server === 'string' ? payload.server : source === 'zokoanime' ? 'ZokoAnime' : 'MegaPlay Direct',
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
