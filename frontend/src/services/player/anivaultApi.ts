@@ -12,7 +12,7 @@ const API_BASE = (
   'https://anivaultapi-production.up.railway.app'
  ).replace(/\/+$/, '');
 
-const SOURCE_BY_SERVER: Record<PlayerServerId, string> = {
+const SOURCE_BY_SERVER: Partial<Record<PlayerServerId, 'megaplay' | 'zokoanime'>> = {
   server1: 'zokoanime',
   default: 'megaplay',
 };
