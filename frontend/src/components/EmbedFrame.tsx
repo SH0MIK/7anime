@@ -74,25 +74,39 @@ export const EmbedFrame: React.FC<EmbedFrameProps> = ({ resolved, title, reloadK
     video.addEventListener('error', handleVideoError);
 
     const start = async () => {
+      // Prefer hls.js on browsers with MediaSource. Some Android browsers report
+      // native HLS support but fail to load provider playlists through it.
+      await loadHlsLibrary();
+      if (disposed) return;
+      const Hls = window.Hls;
+
+      if (Hls?.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+          manifestLoadingTimeOut: 20000,
+          levelLoadingTimeOut: 20000,
+          fragLoadingTimeOut: 30000,
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal && !disposed) {
+            console.error('[AniVault HLS] Fatal playback error:', data);
+            onError?.();
+          }
+        });
+        hls.attachMedia(video);
+        hls.loadSource(source);
+        return;
+      }
+
       if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = source;
         video.load();
         return;
       }
 
-      await loadHlsLibrary();
-      if (disposed) return;
-      const Hls = window.Hls;
-      if (!Hls || !Hls.isSupported()) {
-        throw new Error('This browser does not support HLS playback.');
-      }
-
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal && !disposed) onError?.();
-      });
-      hls.loadSource(source);
-      hls.attachMedia(video);
+      throw new Error('This browser does not support HLS playback.');
     };
 
     start().catch((error) => {
